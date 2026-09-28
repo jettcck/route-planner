@@ -50,7 +50,7 @@ jobs:
         with:
           packages: platform-tools
       - name: Install Android SDK components
-        run: sdkmanager "platform-tools" "platforms;android-37" "build-tools;35.0.0" "ndk;27.2.12479018"
+        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android
