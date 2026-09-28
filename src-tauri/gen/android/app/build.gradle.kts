@@ -22,7 +22,7 @@ val signingProperties = Properties().apply {
 }
 
 android {
-    compileSdk = 35
+    compileSdk = 36
     namespace = "com.luyou.planner"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
