@@ -26,6 +26,9 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
+    "android": {
+      "versionCode": 2000
+    },
     "targets": "all",
     "icon": [
       "icons/32x32.png",

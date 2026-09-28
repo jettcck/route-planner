@@ -21,9 +21,11 @@ AI 生成的营业时间、费用、预约和交通细节可能不准确。天�
 
 ## GitHub 一键发布
 
-将项目推送到自己的 GitHub 仓库后，在 **Actions → Publish Windows release → Run workflow** 点击运行。工作流会构建 Windows NSIS 安装包，并在 **Releases** 中创建对应版本。
+将项目推送到自己的 GitHub 仓库后，在 **Actions → Publish desktop and Android release → Run workflow** 点击运行。工作流会构建 Windows NSIS 安装包和 ARM64 Android APK，并把两者上传到同一个 **Release**。
 
-首次安装 `v0.2.0` 后，应用会在启动时检查 GitHub Releases。发现新版本时，应用内会显示“立即更新”，下载完成后自动重启，不需要再手动运行安装包。发布新版本前，同步修改 `package.json`、`src-tauri/Cargo.toml` 和 `src-tauri/tauri.conf.json` 中的版本号。
+首次安装 `v0.2.0` 后，桌面端和 Android 端都会在启动时检查 GitHub Releases。Windows 发现新版本时会下载签名包并自动重启；Android 会下载匹配包名、版本号和已安装签名的 APK，然后打开系统安装器，用户确认后完成更新。Android 无法静默替换自身；首次从历史 debug APK 切换到正式签名 APK 时，需要先卸载旧 debug 版本。
+
+发布新版本前，同步修改 `package.json`、`src-tauri/Cargo.toml` 和 `src-tauri/tauri.conf.json` 中的版本号，并递增 `bundle.android.versionCode`。正式 Android 更新必须始终使用同一个上传密钥。
 
 自动更新使用签名文件。仓库管理员需要在 GitHub 仓库的 **Settings → Secrets and variables → Actions** 中添加以下 Secret：
 
@@ -31,6 +33,15 @@ AI 生成的营业时间、费用、预约和交通细节可能不准确。天�
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：生成密钥时设置的密码；本项目当前密钥未设置密码，可留空
 
 私钥只放在 GitHub Secret 中，不要提交到仓库。当前公钥已写入 `src-tauri/tauri.conf.json`，用于验证更新包。
+
+Android 发布还需要在 GitHub Actions Secrets 中添加以下四项：
+
+- `ANDROID_KEYSTORE_BASE64`：正式 Android keystore 文件的 Base64 内容
+- `ANDROID_KEYSTORE_PASSWORD`：keystore 密码
+- `ANDROID_KEY_ALIAS`：上传密钥别名
+- `ANDROID_KEY_PASSWORD`：上传密钥密码
+
+不要把 keystore、API Key 或任何密码提交到仓库。丢失 Android 上传密钥会导致后续 APK 无法覆盖已安装版本。
 
 ## 技术栈
 

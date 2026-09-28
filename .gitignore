@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+release/
 src-tauri/target
 src-tauri/gen/schemas
 src-tauri/icons/android/

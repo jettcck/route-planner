@@ -40,6 +40,11 @@ type DestinationOption = {
   type: "城市" | "景点";
   region: string;
 };
+type AndroidUpdate = {
+  version: string;
+  url: string;
+  name: string;
+};
 const destinationOptions: DestinationOption[] = [
   { name: "北京", type: "城市", region: "北京市" },
   { name: "上海", type: "城市", region: "上海市" },
@@ -329,6 +334,7 @@ function App() {
   const [model, setModel] = useState(defaultProvider.model);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
+  const [androidUpdate, setAndroidUpdate] = useState<AndroidUpdate | null>(null);
   const [updateBusy, setUpdateBusy] = useState(false);
   const [updateError, setUpdateError] = useState("");
   const [tutorialStep, setTutorialStep] = useState<number | null>(() =>
@@ -370,14 +376,23 @@ function App() {
   useEffect(() => {
     if (!isTauri()) return;
     let cancelled = false;
-    check()
-      .then((update) => {
-        if (!cancelled && update) setAvailableUpdate(update);
-        else update?.close();
-      })
-      .catch(() => {
-        // Update checks are best effort and should not interrupt planning.
-      });
+    const android = /Android/i.test(navigator.userAgent);
+    if (android) {
+      invoke<AndroidUpdate | null>("plugin:android-updater|check")
+        .then((update) => {
+          if (!cancelled && update) setAndroidUpdate(update);
+        })
+        .catch(() => {});
+    } else {
+      check()
+        .then((update) => {
+          if (!cancelled && update) setAvailableUpdate(update);
+          else update?.close();
+        })
+        .catch(() => {
+          // Update checks are best effort and should not interrupt planning.
+        });
+    }
     return () => {
       cancelled = true;
     };
@@ -430,6 +445,18 @@ function App() {
     setUpdateError("");
     try {
       await availableUpdate.downloadAndInstall();
+    } catch (reason) {
+      setUpdateError(reason instanceof Error ? reason.message : String(reason));
+      setUpdateBusy(false);
+    }
+  }
+  async function installAndroidUpdate() {
+    if (!androidUpdate) return;
+    setUpdateBusy(true);
+    setUpdateError("");
+    try {
+      await invoke("plugin:android-updater|install", { release: androidUpdate });
+      setUpdateBusy(false);
     } catch (reason) {
       setUpdateError(reason instanceof Error ? reason.message : String(reason));
       setUpdateBusy(false);
@@ -666,6 +693,18 @@ function App() {
             </div>
             <button onClick={installUpdate} disabled={updateBusy}>
               {updateBusy ? "正在更新..." : "立即更新"}
+            </button>
+          </div>
+        )}
+        {androidUpdate && (
+          <div className="update-banner" role="status">
+            <div>
+              <strong>发现新版本 v{androidUpdate.version}</strong>
+              <span>将下载 APK 并打开系统安装器，确认后完成更新。</span>
+              {updateError && <small>{updateError}</small>}
+            </div>
+            <button onClick={installAndroidUpdate} disabled={updateBusy}>
+              {updateBusy ? "正在下载..." : "下载并安装"}
             </button>
           </div>
         )}

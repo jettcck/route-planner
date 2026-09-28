@@ -2,6 +2,49 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::time::Duration;
 
+#[cfg(target_os = "android")]
+mod android_updater {
+    use serde::{Deserialize, Serialize};
+    use tauri::{plugin::PluginHandle, AppHandle, Manager, State, Wry};
+
+    pub struct AndroidUpdater(pub PluginHandle<Wry>);
+
+    #[derive(Deserialize, Serialize)]
+    pub struct Release {
+        pub version: String,
+        pub url: String,
+        pub name: String,
+    }
+
+    #[tauri::command]
+    pub fn check(updater: State<'_, AndroidUpdater>) -> Result<Option<Release>, String> {
+        updater
+            .0
+            .run_mobile_plugin("check", serde_json::json!({}))
+            .map_err(|error| error.to_string())
+    }
+
+    #[tauri::command]
+    pub fn install(updater: State<'_, AndroidUpdater>, release: Release) -> Result<(), String> {
+        updater
+            .0
+            .run_mobile_plugin("install", release)
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn init() -> tauri::plugin::TauriPlugin<Wry> {
+        tauri::plugin::Builder::new("android-updater")
+            .setup(|app: &AppHandle<Wry>, api| {
+                let handle =
+                    api.register_android_plugin("com.luyou.planner", "AndroidUpdaterPlugin")?;
+                app.manage(AndroidUpdater(handle));
+                Ok(())
+            })
+            .invoke_handler(tauri::generate_handler![check, install])
+            .build()
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PlannerRequest {
@@ -87,9 +130,15 @@ days 的数量必须等于旅行天数，日期从出发日期逐日递增。est
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(android_updater::init());
+
+    builder
         .invoke_handler(tauri::generate_handler![generate_trip])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
