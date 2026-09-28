@@ -507,6 +507,12 @@ button:disabled {
   gap: 18px;
   align-items: flex-start;
 }
+.trip-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
 .trip-heading h2 {
   color: #20362e;
   font-size: 24px;
@@ -543,6 +549,30 @@ button:disabled {
 }
 .refresh-button:hover {
   background: #f3f8f4;
+}
+.map-button,
+.map-overview-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 34px;
+  border: 1px solid #b9d9c2;
+  border-radius: 5px;
+  background: #edf8ef;
+  color: #26724b;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.map-button:hover,
+.map-overview-action:hover {
+  background: #e1f2e5;
+  border-color: #8fc4a0;
+}
+.map-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 .summary-strip {
   display: grid;
@@ -614,6 +644,70 @@ button:disabled {
   border-color: #6fa986;
   color: #236a48;
   background: #edf7ef;
+}
+.map-overview {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(0, 1.5fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-top: 20px;
+  padding: 13px 14px;
+  border: 1px solid #d8e9dc;
+  border-radius: 7px;
+  background: #f5fbf6;
+}
+.map-overview-copy {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.map-overview-icon {
+  width: 31px;
+  height: 31px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 5px;
+  color: #2a7850;
+  background: #dcefe1;
+}
+.map-overview-copy strong {
+  color: #28583d;
+  font-size: 12px;
+}
+.map-overview-copy p {
+  margin: 3px 0 0;
+  color: #789183;
+  font-size: 11px;
+}
+.map-overview-points {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.map-overview-points span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+  padding: 4px 7px;
+  border: 1px solid #dce9df;
+  border-radius: 4px;
+  background: #fff;
+  color: #668073;
+  font-size: 10px;
+}
+.map-overview-points span.lodging {
+  color: #8b642e;
+  border-color: #eadbbd;
+  background: #fffaf0;
+}
+.map-overview-action {
+  height: 31px;
+  white-space: nowrap;
 }
 .day-content {
   padding-top: 27px;
@@ -1067,6 +1161,27 @@ button:disabled {
   }
   .trip-heading h2 {
     font-size: 21px;
+  }
+  .trip-heading-actions {
+    gap: 5px;
+  }
+  .map-button,
+  .refresh-button {
+    width: 34px;
+    padding: 0;
+  }
+  .map-button span,
+  .refresh-button span {
+    display: none;
+  }
+  .map-overview {
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+  }
+  .map-overview-points {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    order: 3;
   }
 }
 @media (max-width: 470px) {

@@ -12,6 +12,7 @@ import {
   ExternalLink,
   HelpCircle,
   KeyRound,
+  Map,
   MapPin,
   Minus,
   Plus,
@@ -277,6 +278,25 @@ async function showMap(destination: string, location: string) {
   if (isTauri()) await openUrl(url);
   else window.open(url, "_blank", "noopener,noreferrer");
 }
+function mapPoint(activity: Activity, destination: string) {
+  return `${destination} ${activity.location || activity.title}`.trim();
+}
+function tripMapUrl(trip: Trip) {
+  const points = trip.days
+    .flatMap((item) => item.activities)
+    .map((activity) => mapPoint(activity, trip.destination))
+    .filter(Boolean)
+    .filter((point, index, list) => list.indexOf(point) === index)
+    .slice(0, 20);
+  if (!points.length) return "";
+  const params = new URLSearchParams({
+    api: "1",
+    origin: points[0],
+    destination: points[points.length - 1],
+  });
+  if (points.length > 2) params.set("waypoints", points.slice(1, -1).join("|"));
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
 async function openExternal(url: string) {
   if (isTauri()) await openUrl(url);
   else window.open(url, "_blank", "noopener,noreferrer");
@@ -501,6 +521,13 @@ function App() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const dayWeather = weather.find((item) => item.date === day?.date);
+  const mapActivities = trip.days.flatMap((item) => item.activities);
+  const mapLocations = mapActivities
+    .map((item) => item.location || item.title)
+    .filter((location, index, list) => location && list.indexOf(location) === index);
+  const lodgingCount = mapActivities.filter((item) =>
+    /住宿|酒店|民宿|客栈|旅馆/.test(`${item.type}${item.title}${item.location}`),
+  ).length;
   const destinationSuggestions = useMemo(() => {
     const query = input.destination.trim();
     if (!query) return [];
@@ -849,15 +876,29 @@ function App() {
                 <h2>{trip.title}</h2>
                 <p>{trip.overview}</p>
               </div>
-              <button
-                className="refresh-button"
-                title="重新生成行程"
-                onClick={generate}
-                disabled={busy}
-              >
-                <RefreshCw size={17} />
-                <span>重新生成</span>
-              </button>
+              <div className="trip-heading-actions">
+                <button
+                  className="refresh-button"
+                  title="重新生成行程"
+                  onClick={generate}
+                  disabled={busy}
+                >
+                  <RefreshCw size={17} />
+                  <span>重新生成</span>
+                </button>
+                <button
+                  className="map-button"
+                  title="将全部景点和住宿导入地图路线"
+                  onClick={() => {
+                    const url = tripMapUrl(trip);
+                    if (url) openExternal(url);
+                  }}
+                  disabled={!mapLocations.length}
+                >
+                  <Map size={16} />
+                  <span>地图总览</span>
+                </button>
+              </div>
             </div>
             <div className="summary-strip">
               <div>
@@ -896,6 +937,37 @@ function App() {
                 </button>
               ))}
             </div>
+            {mapLocations.length > 0 && (
+              <section className="map-overview" aria-label="地图总览">
+                <div className="map-overview-copy">
+                  <div className="map-overview-icon"><Map size={17} /></div>
+                  <div>
+                    <strong>一键导入地图</strong>
+                    <p>
+                      已整理 {mapLocations.length} 个地点
+                      {lodgingCount > 0 ? `，包含 ${lodgingCount} 处住宿` : ""}
+                    </p>
+                  </div>
+                </div>
+                <div className="map-overview-points" aria-label="行程地点">
+                  {mapActivities.slice(0, 5).map((item, index) => (
+                    <span key={`${item.title}-${index}`} className={/住宿|酒店|民宿|客栈|旅馆/.test(`${item.type}${item.title}`) ? "lodging" : ""}>
+                      {item.location || item.title}
+                    </span>
+                  ))}
+                  {mapLocations.length > 5 && <span>+{mapLocations.length - 5} 个地点</span>}
+                </div>
+                <button
+                  className="map-overview-action"
+                  onClick={() => {
+                    const url = tripMapUrl(trip);
+                    if (url) openExternal(url);
+                  }}
+                >
+                  打开路线地图 <ExternalLink size={14} />
+                </button>
+              </section>
+            )}
             {day && (
               <div className="day-content">
                 <div className="day-title-row">
