@@ -34,8 +34,25 @@ import { getWeather, type Weather } from "./weather";
 import "./App.css";
 
 const preferences = ["美食", "人文", "自然", "亲子", "摄影", "购物"];
-const defaultEndpoint = "https://api.openai.com/v1/chat/completions";
-const apiKeysUrl = "https://platform.openai.com/api-keys";
+type ProviderId = "openai" | "deepseek" | "zhipu" | "qwen" | "moonshot" | "siliconflow" | "custom";
+type Provider = {
+  id: ProviderId;
+  name: string;
+  endpoint: string;
+  model: string;
+  keyUrl?: string;
+  note: string;
+};
+const providers: Provider[] = [
+  { id: "openai", name: "OpenAI", endpoint: "https://api.openai.com/v1/chat/completions", model: "gpt-4.1-mini", keyUrl: "https://platform.openai.com/api-keys", note: "国际服务，模型选择较多" },
+  { id: "deepseek", name: "DeepSeek", endpoint: "https://api.deepseek.com/chat/completions", model: "deepseek-chat", keyUrl: "https://platform.deepseek.com/api_keys", note: "中文使用体验好，价格亲民" },
+  { id: "zhipu", name: "智谱 AI", endpoint: "https://open.bigmodel.cn/api/paas/v4/chat/completions", model: "glm-4-flash", keyUrl: "https://open.bigmodel.cn/usercenter/apikeys", note: "国内服务，支持 GLM 系列模型" },
+  { id: "qwen", name: "通义千问", endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", model: "qwen-turbo", keyUrl: "https://bailian.console.aliyun.com/?tab=model#/api-key", note: "阿里云百炼兼容接口" },
+  { id: "moonshot", name: "Moonshot / Kimi", endpoint: "https://api.moonshot.cn/v1/chat/completions", model: "moonshot-v1-8k", keyUrl: "https://platform.moonshot.cn/console/api-keys", note: "长文本和中文场景" },
+  { id: "siliconflow", name: "SiliconFlow", endpoint: "https://api.siliconflow.cn/v1/chat/completions", model: "Qwen/Qwen3-8B", keyUrl: "https://cloud.siliconflow.cn/account/ak", note: "可选择多种开源模型" },
+  { id: "custom", name: "自定义兼容服务", endpoint: "https://", model: "", note: "填写服务方提供的接口地址和模型" },
+];
+const defaultProvider = providers[0];
 function stored<T>(key: string, fallback: T): T {
   try {
     const value = localStorage.getItem(key);
@@ -72,9 +89,10 @@ function App() {
     return parsed.success ? parsed.data : createSampleTrip();
   });
   const [activeDay, setActiveDay] = useState(0);
-  const [apiKey, setApiKey] = useState("");
-  const [endpoint, setEndpoint] = useState(defaultEndpoint);
-  const [model, setModel] = useState("gpt-4.1-mini");
+  const [apiKeys, setApiKeys] = useState<Partial<Record<ProviderId, string>>>({});
+  const [providerId, setProviderId] = useState<ProviderId>("openai");
+  const [endpoint, setEndpoint] = useState(defaultProvider.endpoint);
+  const [model, setModel] = useState(defaultProvider.model);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
   const [updateBusy, setUpdateBusy] = useState(false);
@@ -161,6 +179,14 @@ function App() {
   function showTutorial() {
     setSettingsOpen(false);
     setTutorialStep(0);
+  }
+  const provider = providers.find((item) => item.id === providerId) ?? defaultProvider;
+  const apiKey = apiKeys[providerId] ?? "";
+  function selectProvider(nextId: ProviderId) {
+    const next = providers.find((item) => item.id === nextId) ?? defaultProvider;
+    setProviderId(nextId);
+    setEndpoint(next.endpoint);
+    setModel(next.model);
   }
   async function installUpdate() {
     if (!availableUpdate) return;
@@ -784,9 +810,9 @@ function App() {
             </div>
             {tutorialStep === 0 && (
               <div className="tutorial-content">
-                <p>AI 生成攻略需要一把专属密钥。打开 OpenAI 的 API Keys 页面，登录账号，创建一把新密钥并复制。</p>
-                <button className="tutorial-link" onClick={() => openExternal(apiKeysUrl)}>
-                  打开 OpenAI API Keys 页面 <ExternalLink size={15} />
+                <p>AI 生成攻略需要你选择一家服务商并准备对应的 API Key。支持 OpenAI、DeepSeek、智谱 AI、通义千问、Moonshot/Kimi 和 SiliconFlow。</p>
+                <button className="tutorial-link" onClick={() => openExternal(provider.keyUrl ?? "https://platform.openai.com/api-keys")}>
+                  打开 {provider.name} 的 API Key 页面 <ExternalLink size={15} />
                 </button>
                 <p className="tutorial-note">API 使用可能需要单独开通付费或充值；ChatGPT 订阅通常不包含 API 额度。请勿把密钥发给其他人。</p>
               </div>
@@ -794,7 +820,7 @@ function App() {
             {tutorialStep === 1 && (
               <div className="tutorial-content">
                 <p>点击应用中的“AI 设置”，把刚复制的密钥粘贴到“API Key”输入框，然后点击“完成”。</p>
-                <p>使用 OpenAI 时，可以先保留预填的模型和接口地址。使用其他兼容服务时，按服务方提供的信息修改这两项。</p>
+                <p>在“AI 设置”中选择服务商，模型和接口地址会自动填好。使用自定义服务时，再按服务方说明填写这两项。</p>
                 <p className="tutorial-note">密钥只在当前窗口中使用；关闭应用后需要重新填写。</p>
               </div>
             )}
@@ -859,14 +885,23 @@ function App() {
             </p>
             <div className="settings-help">
               <strong>第一次使用？</strong>
-              <span>在 OpenAI 创建 API Key，复制后粘贴到下方。可能需要单独开通 API 付费。</span>
+              <span>选择服务商后，打开对应页面创建 API Key，复制后粘贴到下方。各服务的计费和额度独立。</span>
               <div>
-                <button onClick={() => openExternal(apiKeysUrl)}>
+                <button onClick={() => openExternal(provider.keyUrl ?? "https://platform.openai.com/api-keys")}>
                   获取 API Key <ExternalLink size={14} />
                 </button>
                 <button onClick={showTutorial}>查看完整教程</button>
               </div>
             </div>
+            <label className="field">
+              <span>AI 服务商</span>
+              <select value={providerId} onChange={(event) => selectProvider(event.target.value as ProviderId)}>
+                {providers.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+              <small className="provider-note">{provider.note}</small>
+            </label>
             <label className="field">
               <span>API Key</span>
               <input
@@ -874,7 +909,12 @@ function App() {
                 autoComplete="off"
                 value={apiKey}
                 placeholder="在这里粘贴你的 API Key"
-                onChange={(event) => setApiKey(event.target.value)}
+                onChange={(event) =>
+                  setApiKeys((previous) => ({
+                    ...previous,
+                    [providerId]: event.target.value,
+                  }))
+                }
               />
             </label>
             <label className="field">
@@ -891,7 +931,7 @@ function App() {
                 onChange={(event) => setEndpoint(event.target.value)}
               />
             </label>
-            <p className="settings-hint">使用 OpenAI 时可先保留预填的模型和接口地址；使用其他服务时请按服务方说明修改。</p>
+            <p className="settings-hint">预置服务商会自动填写接口地址和常用模型；自定义服务请使用 HTTPS 的 Chat Completions 兼容地址。</p>
             <button
               className="modal-primary"
               onClick={() => setSettingsOpen(false)}

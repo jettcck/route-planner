@@ -15,7 +15,7 @@ npm run tauri dev
 
 ## AI 设置
 
-在应用右上角打开 **AI 设置**，填写自己的 API Key、模型和兼容 Chat Completions 的 HTTPS 接口地址。默认接口地址为 `https://api.openai.com/v1/chat/completions`。密钥只在当前窗口内存中使用，不写入行程文件或本地存储。行程与规划条件保存在当前设备的 WebView 本地存储中。
+在应用右上角打开 **AI 设置**，可选择 OpenAI、DeepSeek、智谱 AI、通义千问、Moonshot/Kimi、SiliconFlow 或自定义兼容服务。选择预置服务商后，接口地址和常用模型会自动填写；自定义服务需要填写兼容 Chat Completions 的 HTTPS 接口地址。密钥只在当前窗口内存中使用，不写入行程文件或本地存储。行程与规划条件保存在当前设备的 WebView 本地存储中。
 
 AI 生成的营业时间、费用、预约和交通细节可能不准确。天气预报来自 Open-Meteo，通常只能查询未来 16 天。出行前应核对场所官方渠道。活动费用汇总不包括未列出的住宿与大交通。
 
