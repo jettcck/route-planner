@@ -747,6 +747,119 @@ button:disabled {
   line-height: 1.65;
   margin: 0;
 }
+.tutorial-modal {
+  width: min(100%, 520px);
+}
+.tutorial-progress {
+  display: flex;
+  gap: 6px;
+}
+.tutorial-progress span {
+  height: 4px;
+  flex: 1;
+  border-radius: 2px;
+  background: #e4ebe6;
+}
+.tutorial-progress span.active {
+  background: #39825b;
+}
+.tutorial-content {
+  display: grid;
+  gap: 12px;
+  color: #526a5e;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.tutorial-content p {
+  margin: 0;
+}
+.tutorial-link,
+.settings-help button {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  color: #1d704a;
+  background: #eaf5ed;
+  border-radius: 5px;
+  padding: 9px 11px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.tutorial-link:hover,
+.settings-help button:hover {
+  background: #dcefe1;
+}
+.tutorial-note,
+.settings-hint {
+  color: #83958a !important;
+  font-size: 11px !important;
+}
+.tutorial-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.tutorial-skip,
+.tutorial-back {
+  border: 0;
+  background: transparent;
+  color: #769084;
+  font-size: 12px;
+  padding: 9px 10px;
+}
+.tutorial-skip:hover,
+.tutorial-back:hover {
+  color: #236a48;
+}
+.tutorial-next {
+  border: 0;
+  background: #206b4b;
+  color: white;
+  border-radius: 5px;
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.tutorial-next:hover {
+  background: #145a3e;
+}
+.settings-help {
+  display: grid;
+  gap: 6px;
+  color: #667e70;
+  background: #f2f8f3;
+  border: 1px solid #dcecdf;
+  border-radius: 6px;
+  padding: 11px 12px;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.settings-help strong {
+  color: #2c6046;
+  font-size: 12px;
+}
+.settings-help > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 2px;
+}
+.settings-help button {
+  padding: 6px 8px;
+  font-size: 11px;
+}
+.settings-help button + button {
+  color: #658174;
+  background: transparent;
+  border: 1px solid #cddfd1;
+}
+.settings-hint {
+  margin: -5px 0 0;
+  line-height: 1.55;
+}
 .modal-primary {
   margin-top: 3px;
 }
