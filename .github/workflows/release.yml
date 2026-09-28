@@ -120,6 +120,9 @@ jobs:
         shell: bash
         run: |
           apk=$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*arm64*.apk' | head -n 1)
+          if [ -z "$apk" ]; then
+            apk=$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*universal*.apk' | head -n 1)
+          fi
           test -n "$apk"
           canonical="route-planner-${{ steps.version.outputs.version }}-arm64.apk"
           cp "$apk" "$canonical"
