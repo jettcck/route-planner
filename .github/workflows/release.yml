@@ -84,13 +84,25 @@ jobs:
           } | ConvertTo-Json -Depth 6
           Set-Content -Path latest.json -Value $manifest -Encoding utf8
       - name: Upload updater manifest
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.version.outputs.version }}
-          files: latest.json
-          fail_on_unmatched_files: true
+        uses: actions/github-script@v7
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: v${{ steps.version.outputs.version }}
+          ASSET_PATH: latest.json
+        with:
+          script: |
+            const fs = require('fs');
+            const { data: release } = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: process.env.RELEASE_TAG
+            });
+            await github.rest.repos.uploadReleaseAsset({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.id,
+              name: process.env.ASSET_PATH,
+              data: fs.readFileSync(process.env.ASSET_PATH)
+            });
 
   android:
     runs-on: ubuntu-latest
@@ -156,10 +168,32 @@ jobs:
           cp "$apk" "$canonical"
           echo "path=$canonical" >> "$GITHUB_OUTPUT"
       - name: Upload APK to release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ steps.version.outputs.version }}
-          files: ${{ steps.apk.outputs.path }}
-          fail_on_unmatched_files: true
+        uses: actions/github-script@v7
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: v${{ steps.version.outputs.version }}
+          ASSET_PATH: ${{ steps.apk.outputs.path }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const { data: release } = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: process.env.RELEASE_TAG
+            });
+            const assetName = path.basename(process.env.ASSET_PATH);
+            const oldAsset = release.assets.find(asset => asset.name === assetName);
+            if (oldAsset) {
+              await github.rest.repos.deleteReleaseAsset({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                asset_id: oldAsset.id
+              });
+            }
+            await github.rest.repos.uploadReleaseAsset({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.id,
+              name: assetName,
+              data: fs.readFileSync(process.env.ASSET_PATH)
+            });
