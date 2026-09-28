@@ -21,9 +21,16 @@ AI 生成的营业时间、费用、预约和交通细节可能不准确。天�
 
 ## GitHub 一键发布
 
-将项目推送到自己的 GitHub 仓库后，在 **Actions → Publish Windows release → Run workflow** 点击运行。工作流会构建 Windows NSIS 安装包，并在 **Releases** 中创建 `v0.1.0` 版本。
+将项目推送到自己的 GitHub 仓库后，在 **Actions → Publish Windows release → Run workflow** 点击运行。工作流会构建 Windows NSIS 安装包，并在 **Releases** 中创建对应版本。
 
-再次发布前，同步修改 `package.json`、`src-tauri/Cargo.toml` 和 `src-tauri/tauri.conf.json` 中的版本号。未签名安装包在部分 Windows 设备上可能触发 SmartScreen 提示；正式对外发布建议配置代码签名。
+首次安装 `v0.2.0` 后，应用会在启动时检查 GitHub Releases。发现新版本时，应用内会显示“立即更新”，下载完成后自动重启，不需要再手动运行安装包。发布新版本前，同步修改 `package.json`、`src-tauri/Cargo.toml` 和 `src-tauri/tauri.conf.json` 中的版本号。
+
+自动更新使用签名文件。仓库管理员需要在 GitHub 仓库的 **Settings → Secrets and variables → Actions** 中添加以下 Secret：
+
+- `TAURI_SIGNING_PRIVATE_KEY`：updater 私钥文件的完整内容
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：生成密钥时设置的密码；本项目当前密钥未设置密码，可留空
+
+私钥只放在 GitHub Secret 中，不要提交到仓库。当前公钥已写入 `src-tauri/tauri.conf.json`，用于验证更新包。
 
 ## 技术栈
 

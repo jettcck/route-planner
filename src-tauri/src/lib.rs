@@ -89,6 +89,7 @@ days 的数量必须等于旅行天数，日期从出发日期逐日递增。est
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![generate_trip])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

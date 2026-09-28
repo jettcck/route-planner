@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { check, type Update } from "@tauri-apps/plugin-updater";
 import {
   ArrowDown,
   ArrowUp,
@@ -75,6 +76,9 @@ function App() {
   const [endpoint, setEndpoint] = useState(defaultEndpoint);
   const [model, setModel] = useState("gpt-4.1-mini");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateError, setUpdateError] = useState("");
   const [tutorialStep, setTutorialStep] = useState<number | null>(() =>
     stored("route-tutorial-seen", false) ? null : 0,
   );
@@ -110,6 +114,21 @@ function App() {
     localStorage.setItem("route-trip", JSON.stringify(trip));
   }, [trip]);
   useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    check()
+      .then((update) => {
+        if (!cancelled && update) setAvailableUpdate(update);
+        else update?.close();
+      })
+      .catch(() => {
+        // Update checks are best effort and should not interrupt planning.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  useEffect(() => {
     let cancelled = false;
     setWeather([]);
     setWeatherStatus("查询中");
@@ -142,6 +161,17 @@ function App() {
   function showTutorial() {
     setSettingsOpen(false);
     setTutorialStep(0);
+  }
+  async function installUpdate() {
+    if (!availableUpdate) return;
+    setUpdateBusy(true);
+    setUpdateError("");
+    try {
+      await availableUpdate.downloadAndInstall();
+    } catch (reason) {
+      setUpdateError(reason instanceof Error ? reason.message : String(reason));
+      setUpdateBusy(false);
+    }
   }
   async function generate() {
     setError("");
@@ -314,6 +344,18 @@ function App() {
             </button>
           </div>
         </header>
+        {availableUpdate && (
+          <div className="update-banner" role="status">
+            <div>
+              <strong>发现新版本 v{availableUpdate.version}</strong>
+              <span>更新会保留你的行程和设置，安装完成后应用将自动重启。</span>
+              {updateError && <small>{updateError}</small>}
+            </div>
+            <button onClick={installUpdate} disabled={updateBusy}>
+              {updateBusy ? "正在更新..." : "立即更新"}
+            </button>
+          </div>
+        )}
         <div className="workspace-body">
           <section className="planner-panel" aria-label="规划条件">
             <div className="panel-kicker">NEW JOURNEY</div>
