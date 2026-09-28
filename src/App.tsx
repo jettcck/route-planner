@@ -238,6 +238,7 @@ const destinationOptions: DestinationOption[] = [
   { name: "平潭", type: "城市", region: "福建省" },
 ];
 type ProviderId = "openai" | "deepseek" | "zhipu" | "qwen" | "moonshot" | "siliconflow" | "custom";
+type MapProvider = "amap" | "baidu";
 type Provider = {
   id: ProviderId;
   name: string;
@@ -273,15 +274,29 @@ function shortDate(value: string) {
     ? value
     : `${date.getMonth() + 1}月${date.getDate()}日`;
 }
-async function showMap(destination: string, location: string) {
-  const url = `https://www.openstreetmap.org/search?query=${encodeURIComponent(`${destination} ${location}`)}`;
+function mapSearchUrl(
+  provider: MapProvider,
+  destination: string,
+  location: string,
+) {
+  const query = `${destination} ${location}`.trim();
+  return provider === "amap"
+    ? `https://www.amap.com/search?query=${encodeURIComponent(query)}&city=${encodeURIComponent(destination)}`
+    : `https://map.baidu.com/search?query=${encodeURIComponent(query)}&region=${encodeURIComponent(destination)}`;
+}
+async function showMap(
+  destination: string,
+  location: string,
+  provider: MapProvider = "amap",
+) {
+  const url = mapSearchUrl(provider, destination, location);
   if (isTauri()) await openUrl(url);
   else window.open(url, "_blank", "noopener,noreferrer");
 }
 function mapPoint(activity: Activity, destination: string) {
   return `${destination} ${activity.location || activity.title}`.trim();
 }
-function tripMapUrl(trip: Trip) {
+function tripMapUrl(trip: Trip, provider: MapProvider) {
   const points = trip.days
     .flatMap((item) => item.activities)
     .map((activity) => mapPoint(activity, trip.destination))
@@ -289,13 +304,10 @@ function tripMapUrl(trip: Trip) {
     .filter((point, index, list) => list.indexOf(point) === index)
     .slice(0, 20);
   if (!points.length) return "";
-  const params = new URLSearchParams({
-    api: "1",
-    origin: points[0],
-    destination: points[points.length - 1],
-  });
-  if (points.length > 2) params.set("waypoints", points.slice(1, -1).join("|"));
-  return `https://www.google.com/maps/dir/?${params.toString()}`;
+  const query = points.join("、");
+  return provider === "amap"
+    ? `https://www.amap.com/search?query=${encodeURIComponent(query)}&city=${encodeURIComponent(trip.destination)}`
+    : `https://map.baidu.com/search?query=${encodeURIComponent(query)}&region=${encodeURIComponent(trip.destination)}`;
 }
 async function openExternal(url: string) {
   if (isTauri()) await openUrl(url);
@@ -890,13 +902,13 @@ function App() {
                   className="map-button"
                   title="将全部景点和住宿导入地图路线"
                   onClick={() => {
-                    const url = tripMapUrl(trip);
+                    const url = tripMapUrl(trip, "amap");
                     if (url) openExternal(url);
                   }}
                   disabled={!mapLocations.length}
                 >
                   <Map size={16} />
-                  <span>地图总览</span>
+                  <span>高德总览</span>
                 </button>
               </div>
             </div>
@@ -957,15 +969,26 @@ function App() {
                   ))}
                   {mapLocations.length > 5 && <span>+{mapLocations.length - 5} 个地点</span>}
                 </div>
-                <button
-                  className="map-overview-action"
-                  onClick={() => {
-                    const url = tripMapUrl(trip);
-                    if (url) openExternal(url);
-                  }}
-                >
-                  打开路线地图 <ExternalLink size={14} />
-                </button>
+                <div className="map-overview-actions">
+                  <button
+                    className="map-overview-action amap"
+                    onClick={() => {
+                      const url = tripMapUrl(trip, "amap");
+                      if (url) openExternal(url);
+                    }}
+                  >
+                    高德地图 <ExternalLink size={14} />
+                  </button>
+                  <button
+                    className="map-overview-action baidu"
+                    onClick={() => {
+                      const url = tripMapUrl(trip, "baidu");
+                      if (url) openExternal(url);
+                    }}
+                  >
+                    百度地图 <ExternalLink size={14} />
+                  </button>
+                </div>
               </section>
             )}
             {day && (
@@ -1022,10 +1045,17 @@ function App() {
                           <span>{item.durationMinutes} 分钟</span>
                           <button
                             onClick={() =>
-                              showMap(trip.destination, item.location)
+                              showMap(trip.destination, item.location, "amap")
                             }
                           >
-                            查看地图 <ExternalLink size={13} />
+                            高德 <ExternalLink size={13} />
+                          </button>
+                          <button
+                            onClick={() =>
+                              showMap(trip.destination, item.location, "baidu")
+                            }
+                          >
+                            百度 <ExternalLink size={13} />
                           </button>
                         </div>
                         <div className="activity-tools">

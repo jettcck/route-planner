@@ -705,9 +705,24 @@ button:disabled {
   border-color: #eadbbd;
   background: #fffaf0;
 }
+.map-overview-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
 .map-overview-action {
   height: 31px;
   white-space: nowrap;
+}
+.map-overview-action.baidu {
+  color: #4f6592;
+  border-color: #c9d5e8;
+  background: #f1f5fc;
+}
+.map-overview-action.baidu:hover {
+  border-color: #a9bddd;
+  background: #e8eef9;
 }
 .day-content {
   padding-top: 27px;
@@ -1182,6 +1197,12 @@ button:disabled {
     grid-column: 1 / -1;
     grid-row: 2;
     order: 3;
+  }
+  .map-overview-actions {
+    gap: 5px;
+  }
+  .map-overview-action {
+    padding-inline: 8px;
   }
 }
 @media (max-width: 470px) {
