@@ -63,6 +63,34 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: --bundles nsis
+      - name: Create updater manifest
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $bundle = Get-ChildItem 'src-tauri/target/release/bundle/nsis' -Filter '*.exe' | Select-Object -First 1
+          if (-not $bundle) { throw 'NSIS installer not found' }
+          $signature = (Get-Content "$($bundle.FullName).sig" -Raw).Trim()
+          if (-not $signature) { throw 'Updater signature not found' }
+          $manifest = @{
+            version = $version
+            notes = 'Windows 安装包更新'
+            pub_date = [DateTime]::UtcNow.ToString('o')
+            platforms = @{
+              'windows-x86_64' = @{
+                signature = $signature
+                url = "https://github.com/jettcck/route-planner/releases/download/v$version/Route_${version}_x64-setup.exe"
+              }
+            }
+          } | ConvertTo-Json -Depth 6
+          Set-Content -Path latest.json -Value $manifest -Encoding utf8
+      - name: Upload updater manifest
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          files: latest.json
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   android:
     runs-on: ubuntu-latest
