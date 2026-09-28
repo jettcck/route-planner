@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { check, type Update } from "@tauri-apps/plugin-updater";
@@ -34,6 +34,63 @@ import { getWeather, type Weather } from "./weather";
 import "./App.css";
 
 const preferences = ["美食", "人文", "自然", "亲子", "摄影", "购物"];
+type DestinationOption = {
+  name: string;
+  type: "城市" | "景点";
+  region: string;
+};
+const destinationOptions: DestinationOption[] = [
+  { name: "北京", type: "城市", region: "北京市" },
+  { name: "上海", type: "城市", region: "上海市" },
+  { name: "广州", type: "城市", region: "广东省" },
+  { name: "深圳", type: "城市", region: "广东省" },
+  { name: "珠海", type: "城市", region: "广东省" },
+  { name: "成都", type: "城市", region: "四川省" },
+  { name: "重庆", type: "城市", region: "重庆市" },
+  { name: "西安", type: "城市", region: "陕西省" },
+  { name: "杭州", type: "城市", region: "浙江省" },
+  { name: "南京", type: "城市", region: "江苏省" },
+  { name: "苏州", type: "城市", region: "江苏省" },
+  { name: "厦门", type: "城市", region: "福建省" },
+  { name: "福州", type: "城市", region: "福建省" },
+  { name: "青岛", type: "城市", region: "山东省" },
+  { name: "大连", type: "城市", region: "辽宁省" },
+  { name: "三亚", type: "城市", region: "海南省" },
+  { name: "海口", type: "城市", region: "海南省" },
+  { name: "北海", type: "城市", region: "广西壮族自治区" },
+  { name: "桂林", type: "城市", region: "广西壮族自治区" },
+  { name: "昆明", type: "城市", region: "云南省" },
+  { name: "大理", type: "城市", region: "云南省" },
+  { name: "丽江", type: "城市", region: "云南省" },
+  { name: "拉萨", type: "城市", region: "西藏自治区" },
+  { name: "张家界", type: "城市", region: "湖南省" },
+  { name: "故宫博物院", type: "景点", region: "北京" },
+  { name: "八达岭长城", type: "景点", region: "北京" },
+  { name: "颐和园", type: "景点", region: "北京" },
+  { name: "天坛公园", type: "景点", region: "北京" },
+  { name: "外滩", type: "景点", region: "上海" },
+  { name: "上海迪士尼度假区", type: "景点", region: "上海" },
+  { name: "西湖", type: "景点", region: "杭州" },
+  { name: "乌镇", type: "景点", region: "浙江嘉兴" },
+  { name: "鼓浪屿", type: "景点", region: "厦门" },
+  { name: "黄山风景区", type: "景点", region: "安徽黄山" },
+  { name: "九寨沟", type: "景点", region: "四川阿坝" },
+  { name: "稻城亚丁", type: "景点", region: "四川甘孜" },
+  { name: "张家界国家森林公园", type: "景点", region: "湖南张家界" },
+  { name: "桂林漓江", type: "景点", region: "广西桂林" },
+  { name: "秦始皇帝陵博物院", type: "景点", region: "陕西西安" },
+  { name: "布达拉宫", type: "景点", region: "西藏拉萨" },
+  { name: "洱海", type: "景点", region: "云南大理" },
+  { name: "玉龙雪山", type: "景点", region: "云南丽江" },
+  { name: "天涯海角", type: "景点", region: "海南三亚" },
+  { name: "长白山", type: "景点", region: "吉林" },
+  { name: "黄果树瀑布", type: "景点", region: "贵州安顺" },
+  { name: "梵净山", type: "景点", region: "贵州铜仁" },
+  { name: "泰山", type: "景点", region: "山东泰安" },
+  { name: "莫高窟", type: "景点", region: "甘肃敦煌" },
+  { name: "平遥古城", type: "景点", region: "山西晋中" },
+  { name: "宏村", type: "景点", region: "安徽黄山" },
+];
 type ProviderId = "openai" | "deepseek" | "zhipu" | "qwen" | "moonshot" | "siliconflow" | "custom";
 type Provider = {
   id: ProviderId;
@@ -109,6 +166,8 @@ function App() {
   const [error, setError] = useState("");
   const [weather, setWeather] = useState<Weather[]>([]);
   const [weatherStatus, setWeatherStatus] = useState("");
+  const [destinationFocused, setDestinationFocused] = useState(false);
+  const [highlightedDestination, setHighlightedDestination] = useState(0);
   const day = trip.days[Math.min(activeDay, trip.days.length - 1)];
   const dates = trip.days.map((item) => item.date).join(",");
   const total = useMemo(
@@ -297,6 +356,50 @@ function App() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const dayWeather = weather.find((item) => item.date === day?.date);
+  const destinationSuggestions = useMemo(() => {
+    const query = input.destination.trim();
+    if (!query) return [];
+    return destinationOptions
+      .filter(
+        (option) => option.name.includes(query) || option.region.includes(query),
+      )
+      .sort((a, b) => {
+        const aStarts = a.name.startsWith(query) ? 0 : 1;
+        const bStarts = b.name.startsWith(query) ? 0 : 1;
+        return aStarts - bStarts || a.name.localeCompare(b.name, "zh-CN");
+      })
+      .slice(0, 8);
+  }, [input.destination]);
+
+  function selectDestination(option: DestinationOption) {
+    change("destination", option.name);
+    setDestinationFocused(false);
+    setHighlightedDestination(0);
+  }
+
+  function handleDestinationKeyDown(
+    event: KeyboardEvent<HTMLInputElement>,
+  ) {
+    if (!destinationSuggestions.length) {
+      if (event.key === "Escape") setDestinationFocused(false);
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setHighlightedDestination((current) =>
+        Math.min(current + 1, destinationSuggestions.length - 1),
+      );
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setHighlightedDestination((current) => Math.max(current - 1, 0));
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      selectDestination(destinationSuggestions[highlightedDestination]);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      setDestinationFocused(false);
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -390,15 +493,54 @@ function App() {
             <div className="form-stack">
               <label className="field">
                 <span>目的地</span>
-                <div className="input-icon">
-                  <MapPin size={17} />
-                  <input
-                    value={input.destination}
-                    placeholder="例如：北京"
-                    onChange={(event) =>
-                      change("destination", event.target.value)
-                    }
-                  />
+                <div className="destination-autocomplete">
+                  <div className="input-icon">
+                    <MapPin size={17} />
+                    <input
+                      value={input.destination}
+                      placeholder="例如：北京或故宫"
+                      role="combobox"
+                      aria-autocomplete="list"
+                      aria-expanded={destinationFocused && destinationSuggestions.length > 0}
+                      aria-controls="destination-suggestions"
+                      onFocus={() => setDestinationFocused(true)}
+                      onBlur={() => setTimeout(() => setDestinationFocused(false), 120)}
+                      onKeyDown={handleDestinationKeyDown}
+                      onChange={(event) => {
+                        setHighlightedDestination(0);
+                        change("destination", event.target.value);
+                      }}
+                    />
+                  </div>
+                  {destinationFocused && destinationSuggestions.length > 0 && (
+                    <div
+                      id="destination-suggestions"
+                      className="destination-suggestions"
+                      role="listbox"
+                    >
+                      {destinationSuggestions.map((option, index) => (
+                        <button
+                          type="button"
+                          key={`${option.type}-${option.name}`}
+                          className={`destination-option${
+                            index === highlightedDestination ? " active" : ""
+                          }`}
+                          role="option"
+                          aria-selected={index === highlightedDestination}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => selectDestination(option)}
+                        >
+                          <span className="destination-option-name">{option.name}</span>
+                          <span className="destination-option-meta">
+                            <span className={`destination-type ${option.type === "景点" ? "spot" : "city"}`}>
+                              {option.type}
+                            </span>
+                            {option.region}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </label>
               <label className="field">

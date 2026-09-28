@@ -297,6 +297,74 @@ button:disabled {
 .input-prefix {
   position: relative;
 }
+.destination-autocomplete {
+  position: relative;
+  z-index: 8;
+}
+.destination-suggestions {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  max-height: 286px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid #d5e2d8;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 12px 25px #234b3820;
+}
+.destination-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 42px;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #294438;
+  text-align: left;
+}
+.destination-option:hover,
+.destination-option.active {
+  background: #eef7f0;
+}
+.destination-option-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+}
+.destination-option-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+  color: #8a9c91;
+  font-size: 10px;
+  font-weight: 500;
+}
+.destination-type {
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 1;
+}
+.destination-type.city {
+  color: #28704d;
+  background: #e5f3e8;
+}
+.destination-type.spot {
+  color: #97652a;
+  background: #fbf0dc;
+}
 .input-icon svg,
 .input-prefix b {
   position: absolute;
