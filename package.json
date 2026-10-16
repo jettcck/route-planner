@@ -1,13 +1,48 @@
 {
   "name": "route-planner",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.9",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev": "node server/dev-all.mjs",
+    "dev:frontend": "vite",
+    "dev:all": "node server/dev-all.mjs",
+    "auth:dev": "node --env-file-if-exists=.env server/auth-server.mjs",
+    "auth:config-check": "node --env-file-if-exists=.env server/config-check.mjs",
+    "auth:config-test": "node server/config-check-test.mjs",
+    "auth:transport-test": "node server/production-transport-test.mjs",
+    "auth:smoke": "node server/smoke-test.mjs",
+    "auth:client-test": "node server/auth-request-test.mjs",
+    "auth:routing-test": "node server/request-routing-test.mjs",
+    "auth:ai-test": "node server/ai-proxy-test.mjs",
+    "auth:password-reset-test": "node server/password-reset-test.mjs",
+    "travel-agent:test": "node server/travel-agent-test.mjs",
+    "trip:generation-test": "node server/trip-generation-test.mjs",
+    "dev:supervisor-test": "node server/dev-supervisor-test.mjs",
+    "weather:registration-test": "node server/weather-registration-test.mjs",
+    "weather:resilience-test": "node server/weather-resilience-test.mjs",
+    "data:sanitizer-test": "node server/data-sanitizer-test.mjs",
+    "storage:key-test": "node server/storage-key-test.mjs",
+    "ledger:test": "node server/ledger-test.mjs",
+    "budget:test": "node server/budget-test.mjs",
+    "reminders:test": "node server/reminders-test.mjs",
+    "auth:data-test": "node server/data-recovery-test.mjs",
+    "verify:android": "node server/android-check.mjs",
+    "verify:android:unit": "node server/android-check.mjs :app:testUniversalDebugUnitTest",
+    "android:release:local": "node server/android-release-build.mjs",
+    "verify:native": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml --all-targets",
+    "release:check": "node server/release-check.mjs",
+    "release:assets-test": "node server/release-assets-test.mjs",
+    "release:frontend-config-check": "node server/frontend-config-check.mjs",
+    "release:environment-check": "node server/release-env-check.mjs",
+    "release:environment-test": "node server/release-env-test.mjs",
+    "deploy:config-test": "node server/deploy-config-test.mjs",
+    "deploy:render-test": "node server/deploy-render-test.mjs",
+    "verify": "npm run auth:config-check && npm run auth:config-test && npm run auth:transport-test && npm run auth:smoke && npm run auth:client-test && npm run auth:routing-test && npm run auth:data-test && npm run auth:ai-test && npm run auth:password-reset-test && npm run travel-agent:test && npm run trip:generation-test && npm run weather:registration-test && npm run weather:resilience-test && npm run data:sanitizer-test && npm run storage:key-test && npm run storage:migration-test && npm run ledger:test && npm run budget:test && npm run reminders:test && npm run dev:supervisor-test && npm run release:assets-test && npm run release:check && npm run deploy:render-test && npm run build",
+    "build": "node server/clean-dist.mjs && tsc && vite build && node server/frontend-bundle-check.mjs",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "storage:migration-test": "node server/storage-migration-test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -27,3 +62,5 @@
     "vite": "^8.0.16"
   }
 }
+
+

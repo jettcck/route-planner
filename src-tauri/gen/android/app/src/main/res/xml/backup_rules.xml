@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Android Keystore key is device-bound and is not restored by Auto Backup.
+  Exclude only the encrypted vault; restoring its ciphertext without the key
+  would make sessions and API keys look corrupt after device migration.
+  Reminders and weather preferences remain eligible for backup and are rebuilt
+  by the boot/package-replaced receivers.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="route_secure_storage.xml" />
+</full-backup-content>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ cloud backup and device-to-device transfer rules. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="route_secure_storage.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="route_secure_storage.xml" />
+    </device-transfer>
+</data-extraction-rules>

@@ -1,0 +1,15 @@
+.android-test-page { min-height: 100vh; padding: 42px max(22px, 5vw) 64px; background: #f3f7f4; color: #20322b; }
+.android-test-header { max-width: 1120px; margin: 0 auto 24px; display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+.android-test-header h1 { margin: 10px 0 8px; font-size: clamp(26px, 4vw, 42px); letter-spacing: -.03em; }
+.android-test-header p { max-width: 650px; margin: 0; color: #64776d; line-height: 1.7; }
+.android-test-header a { color: #17613f; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.android-test-badge { color: #17613f; font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+.android-test-runtime, .android-test-card, .android-test-log { max-width: 1120px; margin: 0 auto 16px; border: 1px solid #d5e2d9; border-radius: 14px; background: #fff; box-shadow: 0 5px 18px rgba(28, 65, 45, .06); }
+.android-test-runtime { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 18px; padding: 16px 18px; }
+.android-test-runtime small { flex-basis: 100%; overflow: hidden; color: #81938a; text-overflow: ellipsis; white-space: nowrap; }
+.good { color: #17613f; font-weight: 700; }.warn { color: #986a1d; font-weight: 700; }.android-test-runtime code { color: #64776d; }
+.android-test-grid { max-width: 1120px; margin: 0 auto 16px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.android-test-card { margin: 0; padding: 20px; }.android-test-card h2, .android-test-log h2 { margin: 0 0 8px; font-size: 17px; }.android-test-card p { min-height: 44px; margin: 0 0 16px; color: #718178; font-size: 13px; line-height: 1.6; }
+.android-test-card button, .android-test-log button { min-height: 34px; margin: 0 7px 7px 0; padding: 7px 11px; border: 1px solid #bfd6c7; border-radius: 8px; background: #f4faf6; color: #17613f; font-weight: 700; }.android-test-card button:disabled, .android-test-log button:disabled { opacity: .5; cursor: wait; }.android-test-actions { display: flex; flex-wrap: wrap; }.update-result { display: block; color: #17613f; }
+.android-test-log { padding: 20px; }.android-test-log-head { display: flex; justify-content: space-between; align-items: center; }.android-test-log-head button { margin: 0; }.android-test-log > p { color: #81938a; }.android-test-log article { margin-top: 10px; padding: 12px; border-left: 3px solid #48a56f; border-radius: 8px; background: #f5faf6; }.android-test-log article.fail { border-left-color: #c85b57; background: #fff7f6; }.android-test-log article div { display: flex; justify-content: space-between; gap: 16px; }.android-test-log time { color: #81938a; font-size: 12px; }.android-test-log pre { margin: 8px 0 0; overflow: auto; color: #52645b; font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
+@media (max-width: 800px) { .android-test-grid { grid-template-columns: 1fr; }.android-test-header { flex-direction: column; }.android-test-page { padding-top: calc(24px + env(safe-area-inset-top)); } }

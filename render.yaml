@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: route-planner-auth
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci --omit=dev
+    startCommand: node server/auth-server.mjs
+    healthCheckPath: /readyz
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: AUTH_HOST
+        value: 0.0.0.0
+      - key: AUTH_LOG_LEVEL
+        value: info
+      - key: AUTH_ORIGINS
+        value: https://tauri.localhost
+      - key: AUTH_DATA_DIR
+        value: /opt/render/project/src/server/data
+      - key: AI_ENDPOINT
+        value: https://api.deepseek.com/chat/completions
+      - key: AI_MODEL
+        value: deepseek-chat
+      - key: AI_API_KEY
+        sync: false

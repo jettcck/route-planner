@@ -19,3 +19,26 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# These classes are instantiated by Tauri through JNI using their fully
+# qualified names, and the worker/receivers are loaded by Android or
+# WorkManager from manifest/persisted class names. Keep both names and members
+# so a minified Release build cannot silently break native features.
+-keep class com.luyou.planner.AndroidUpdaterPlugin { *; }
+-keep class com.luyou.planner.FileSharePlugin { *; }
+-keep class com.luyou.planner.LocationPermissionPlugin { *; }
+-keep class com.luyou.planner.MapLauncherPlugin { *; }
+-keep class com.luyou.planner.NotificationPlugin { *; }
+-keep class com.luyou.planner.SecureStoragePlugin { *; }
+-keep class com.luyou.planner.WeatherBackgroundPlugin { *; }
+-keep class com.luyou.planner.WeatherRiskWorker { *; }
+-keep class com.luyou.planner.RouteReminderReceiver { *; }
+-keep class com.luyou.planner.RouteReminderBootReceiver { *; }
+
+# WorkManager creates its Room database implementation reflectively during
+# AndroidX Startup. R8 can otherwise remove the generated zero-argument
+# constructor, which makes every minified Release APK crash before MainActivity
+# is created with NoSuchMethodException: WorkDatabase_Impl.<init>.
+-keep class androidx.work.impl.WorkDatabase_Impl { *; }
+-keep class androidx.work.impl.WorkDatabase_Impl$* { *; }
+-keep class * extends androidx.room.RoomDatabase { *; }

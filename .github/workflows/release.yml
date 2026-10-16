@@ -4,13 +4,78 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - name: Check production release configuration before builds
+        env:
+          VITE_AUTH_ENDPOINT: ${{ vars.VITE_AUTH_ENDPOINT }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: npm run release:environment-check
+      - name: Audit npm dependencies
+        run: npm audit --registry=https://registry.npmjs.org --audit-level=high
+      - name: Start local account service
+        shell: bash
+        run: |
+          nohup node server/auth-server.mjs > auth-server.log 2>&1 &
+          echo $! > auth-server.pid
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8787/healthz > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:8787/readyz > /dev/null
+      - name: Run release validation
+        run: npm run verify
+      - name: Run Rust validation
+        run: npm run verify:native
+      - name: Upload validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-validation-logs
+          path: auth-server.log
+          if-no-files-found: ignore
+      - name: Stop local account service
+        if: always()
+        shell: bash
+        run: |
+          if [ -f auth-server.pid ]; then kill "$(cat auth-server.pid)" || true; fi
+
+  windows:
+    runs-on: windows-latest
+    needs: validation
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -20,6 +85,19 @@ jobs:
         with:
           workspaces: src-tauri
       - run: npm ci
+      - name: Validate production frontend endpoint
+        env:
+          VITE_AUTH_ENDPOINT: ${{ vars.VITE_AUTH_ENDPOINT }}
+        run: npm run release:frontend-config-check
+      - name: Configure updater repository
+        shell: pwsh
+        env:
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          $configPath = 'src-tauri/tauri.conf.json'
+          $config = Get-Content $configPath -Raw | ConvertFrom-Json
+          $config.plugins.updater.endpoints = @("https://github.com/$env:RELEASE_REPOSITORY/releases/latest/download/latest.json")
+          $config | ConvertTo-Json -Depth 20 | Set-Content $configPath -Encoding utf8
       - name: Read app version
         id: version
         shell: pwsh
@@ -40,6 +118,9 @@ jobs:
             }).catch(() => ({ data: null }));
             if (!release) core.info(`No existing release for ${tag}`);
             if (release) {
+              if (!release.draft) {
+                throw new Error(`Release ${tag} is already public; bump package.json before publishing a replacement`);
+              }
               for (const asset of release.assets) {
                 if (asset.name.includes(process.env.RELEASE_TAG.slice(1)) || asset.name === 'latest.json') {
                   core.info(`Deleting stale asset ${asset.name}`);
@@ -56,11 +137,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VITE_AUTH_ENDPOINT: ${{ vars.VITE_AUTH_ENDPOINT }}
+          VITE_ENABLE_ANDROID_DIAGNOSTICS: "false"
         with:
           tagName: v__VERSION__
           releaseName: 途迹 v__VERSION__
           releaseBody: Windows 安装包。行程费用与场所信息请在出行前核对。
-          releaseDraft: false
+          # Keep the release private until both Windows and Android assets pass
+          # their checks. This prevents clients from seeing a half-published
+          # version when the second platform fails.
+          releaseDraft: true
           prerelease: false
           args: --bundles nsis
       - name: Create updater manifest
@@ -71,6 +157,11 @@ jobs:
           if (-not $bundle) { throw 'NSIS installer not found' }
           $signature = (Get-Content "$($bundle.FullName).sig" -Raw).Trim()
           if (-not $signature) { throw 'Updater signature not found' }
+          # Tauri derives the installer name from productName. Keep the
+          # manifest aligned with the actual uploaded asset (which currently
+          # includes the Chinese product name) instead of guessing a filename.
+          $assetName = $bundle.Name
+          $assetPath = [Uri]::EscapeDataString($assetName).Replace('%2F', '/')
           $manifest = @{
             version = $version
             notes = 'Windows 安装包更新'
@@ -78,7 +169,7 @@ jobs:
             platforms = @{
               'windows-x86_64' = @{
                 signature = $signature
-                url = "https://github.com/jettcck/route-planner/releases/download/v$version/Route_${version}_x64-setup.exe"
+                url = "https://github.com/${{ github.repository }}/releases/download/v$version/$assetPath"
               }
             }
           } | ConvertTo-Json -Depth 6
@@ -106,9 +197,14 @@ jobs:
 
   android:
     runs-on: ubuntu-latest
-    needs: windows
+    needs: [validation, windows]
+    timeout-minutes: 60
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -124,8 +220,16 @@ jobs:
         run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018"
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
       - run: npm ci
+      - name: Validate production frontend endpoint
+        env:
+          VITE_AUTH_ENDPOINT: ${{ vars.VITE_AUTH_ENDPOINT }}
+        run: npm run release:frontend-config-check
+      - name: Run Android compile validation
+        run: npm run verify:android
+      - name: Run Android unit tests
+        run: npm run verify:android:unit
       - name: Read app version
         id: version
         shell: bash
@@ -151,22 +255,54 @@ jobs:
           keyAlias=$ANDROID_KEY_ALIAS
           keyPassword=$ANDROID_KEY_PASSWORD
           EOF
-      - name: Build ARM64 APK
+      - name: Build universal Android APK
         env:
           CI: true
-        run: npm run tauri android build -- --ci --apk --target aarch64
+          ROUTE_ANDROID_UPDATE_REPOSITORY: ${{ github.repository }}
+          VITE_AUTH_ENDPOINT: ${{ vars.VITE_AUTH_ENDPOINT }}
+          VITE_ENABLE_ANDROID_DIAGNOSTICS: "false"
+        run: npm run tauri android build -- --ci --apk --target aarch64 armv7 i686 x86_64
       - name: Locate APK
         id: apk
         shell: bash
         run: |
-          apk=$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*arm64*.apk' | head -n 1)
-          if [ -z "$apk" ]; then
-            apk=$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*universal*.apk' | head -n 1)
-          fi
-          test -n "$apk"
-          canonical="route-planner-${{ steps.version.outputs.version }}-arm64.apk"
+          apk=$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*universal*.apk' | head -n 1)
+          test -n "$apk" || { echo 'Universal APK was not produced'; find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk'; exit 1; }
+          canonical="route-planner-${{ steps.version.outputs.version }}-android.apk"
           cp "$apk" "$canonical"
           echo "path=$canonical" >> "$GITHUB_OUTPUT"
+      - name: Verify Android APK before publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk='${{ steps.apk.outputs.path }}'
+          build_tools="${ANDROID_HOME}/build-tools/36.0.0"
+          test -x "$build_tools/apksigner" || { echo 'apksigner not found'; exit 1; }
+          test -x "$build_tools/aapt2" || { echo 'aapt2 not found'; exit 1; }
+          "$build_tools/apksigner" verify --verbose "$apk"
+          version_code=$(grep '^tauri\.android\.versionCode=' src-tauri/gen/android/app/tauri.properties | cut -d= -f2)
+          version_name=$(grep '^tauri\.android\.versionName=' src-tauri/gen/android/app/tauri.properties | cut -d= -f2)
+          badging=$("$build_tools/aapt2" dump badging "$apk")
+          echo "$badging" | grep -F "package: name='com.luyou.planner' versionCode='$version_code'" >/dev/null
+          echo "$badging" | grep -F "versionName='$version_name'" >/dev/null
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            echo "$badging" | grep -F "'$abi'" >/dev/null || {
+              echo "Universal APK is missing native ABI: $abi"
+              exit 1
+            }
+            native_lib="lib/$abi/libroute_planner_lib.so"
+            # awk consumes the whole stream. A grep that exits on its first
+            # match can SIGPIPE strings/unzip while pipefail is enabled.
+            unzip -p "$apk" "$native_lib" | strings | awk 'index($0, "/index.html") { found=1 } END { exit found ? 0 : 1 }' || {
+              echo "Android native library is missing embedded frontend index: $native_lib"
+              exit 1
+            }
+            unzip -p "$apk" "$native_lib" | strings | awk 'index($0, "/assets/index-") { found=1 } END { exit found ? 0 : 1 }' || {
+              echo "Android native library is missing embedded frontend bundle: $native_lib"
+              exit 1
+            }
+          done
+          sha256sum "$apk" | tee "$apk.sha256"
       - name: Upload APK to release
         uses: actions/github-script@v7
         env:
@@ -182,8 +318,8 @@ jobs:
               tag: process.env.RELEASE_TAG
             });
             const assetName = path.basename(process.env.ASSET_PATH);
-            const oldAsset = release.assets.find(asset => asset.name === assetName);
-            if (oldAsset) {
+            const oldAssets = release.assets.filter(asset => asset.name === assetName || asset.name === `${assetName}.sha256`);
+            for (const oldAsset of oldAssets) {
               await github.rest.repos.deleteReleaseAsset({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -197,3 +333,54 @@ jobs:
               name: assetName,
               data: fs.readFileSync(process.env.ASSET_PATH)
             });
+            const checksumPath = `${process.env.ASSET_PATH}.sha256`;
+            await github.rest.repos.uploadReleaseAsset({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.id,
+              name: `${assetName}.sha256`,
+              data: fs.readFileSync(checksumPath)
+            });
+
+      - name: Remove Android signing material
+        if: always()
+        shell: bash
+        run: |
+          rm -f src-tauri/gen/android/app/route-planner-upload.jks
+          rm -f src-tauri/gen/android/app/key.properties
+          rm -f route-planner-*-android.apk
+          rm -f route-planner-*-android.apk.sha256
+      - name: Validate and publish complete release
+        if: success()
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: v${{ steps.version.outputs.version }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        with:
+          script: |
+            const fs = require('fs');
+            const { data: release } = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: process.env.RELEASE_TAG
+            });
+            const manifestAsset = release.assets.find((asset) => asset.name === 'latest.json');
+            if (!manifestAsset) throw new Error('latest.json was not uploaded');
+            const response = await github.request(manifestAsset.url, {
+              headers: { accept: 'application/octet-stream' }
+            });
+            const manifest = JSON.parse(Buffer.from(response.data).toString('utf8'));
+            const { validateReleaseAssets } = await import(`${process.env.GITHUB_WORKSPACE}/server/release-assets.mjs`);
+            validateReleaseAssets(release, manifest, {
+              repository: process.env.RELEASE_REPOSITORY,
+              version: process.env.RELEASE_VERSION,
+            });
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.id,
+              draft: false,
+              prerelease: false,
+            });
+            core.info(`Published complete release ${process.env.RELEASE_TAG}`);

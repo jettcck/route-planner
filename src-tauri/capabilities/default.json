@@ -5,7 +5,14 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "opener:default"
+    "opener:default",
+    "map-launcher:default",
+    "android-updater:default",
+    "secure-storage:default",
+    "file-share:default",
+    "notifications:default",
+    "weather-background:default",
+    "location-permission:default"
   ],
   "platforms": ["android", "iOS", "windows", "macOS", "linux"]
 }

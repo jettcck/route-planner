@@ -13,9 +13,30 @@ dist-ssr
 release/
 src-tauri/target
 src-tauri/gen/schemas
+src-tauri/gen/android/app/key.properties
+src-tauri/gen/android/app/*.jks
+src-tauri/gen/android/local.properties
+src-tauri/gen/android/.gradle/
+src-tauri/gen/android/.kotlin/
+src-tauri/gen/android/.tauri/
+src-tauri/gen/android/build/
+src-tauri/gen/android/app/build/
+src-tauri/gen/android/buildSrc/.kotlin/
+src-tauri/gen/android/app/.cxx/
 src-tauri/icons/android/
 src-tauri/icons/ios/
 *.local
+server/data/
+server/data/*.bak
+.trip-generation-test-*
+.env
+.env.*
+!.env.example
+deploy/auth.env
+deploy/data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
 
 # Editor directories and files
 .vscode/*

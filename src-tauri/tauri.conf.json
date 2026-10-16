@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "途迹 Route",
-  "version": "0.2.0",
+  "version": "0.3.9",
   "identifier": "com.luyou.planner",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -20,14 +20,14 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' ipc: http://ipc.localhost; connect-src 'self' https: http://localhost:* http://127.0.0.1:* http://10.0.2.2:*; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; script-src 'self' 'unsafe-eval'"
     }
   },
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
     "android": {
-      "versionCode": 2000
+      "versionCode": 3009
     },
     "targets": "all",
     "icon": [

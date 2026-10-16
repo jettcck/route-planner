@@ -1,0 +1,18 @@
+.preview-page { min-height: 100vh; padding: 38px max(22px, 5vw) 64px; background: radial-gradient(circle at 20% 0%, #e0f1e4, transparent 38%), #f3f7f4; color: #24313a; }
+.preview-toolbar { max-width: 1120px; margin: 0 auto 28px; display: flex; justify-content: space-between; gap: 24px; }
+.preview-toolbar > div:first-child span { color: #17613f; font-size: 11px; font-weight: 800; letter-spacing: .14em; }
+.preview-toolbar h1 { margin: 9px 0 7px; font-size: clamp(26px, 4vw, 40px); letter-spacing: -.04em; }
+.preview-toolbar p { max-width: 680px; margin: 0; color: #718178; line-height: 1.7; }
+.preview-toolbar-actions { display: flex; gap: 16px; align-items: flex-start; white-space: nowrap; }
+.preview-toolbar-actions a, .preview-toolbar-actions button { color: #17613f; font-size: 13px; font-weight: 700; text-decoration: none; }
+.preview-toolbar-actions button { padding: 0; border: 0; background: transparent; cursor: pointer; }
+.preview-stage { max-width: 1120px; margin: auto; display: flex; justify-content: center; align-items: center; gap: clamp(35px, 8vw, 130px); }
+.phone-device { position: relative; width: 390px; height: 844px; padding: 10px; border: 8px solid #111c1b; border-radius: 49px; background: #111c1b; box-shadow: 0 25px 70px rgba(22, 50, 36, .25), 0 3px 0 #52625d; }
+.phone-camera { position: absolute; z-index: 3; top: 13px; left: 50%; width: 100px; height: 25px; transform: translateX(-50%); border-radius: 0 0 16px 16px; background: #111c1b; }
+.phone-screen-frame { display: block; width: 100%; height: 100%; border: 0; border-radius: 35px; background: #f4f6f4; }
+.preview-notes { width: min(360px, 100%); }
+.preview-note { display: flex; flex-direction: column; gap: 6px; padding: 17px 0; border-bottom: 1px solid #d7e5db; }
+.preview-note b { color: #30463a; font-size: 14px; }
+.preview-note span { color: #718178; font-size: 12px; line-height: 1.7; }
+.preview-note--tip { border: 1px solid #d5e2d9; border-radius: 11px; margin-top: 18px; padding: 14px; background: rgba(255,255,255,.65); }
+@media (max-width: 760px) { .preview-page { padding: 24px 16px 50px; } .preview-toolbar { flex-direction: column; } .preview-stage { flex-direction: column; gap: 28px; } .preview-notes { width: min(390px, 100%); } .phone-device { transform: scale(.88); transform-origin: top center; margin-bottom: -100px; } }
