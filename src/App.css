@@ -2054,24 +2054,7 @@ button:disabled {
   .offline-banner {
     padding-inline: 20px;
   }
-  .motion-on .workspace-body,
-.motion-on .feature-scroll {
-  animation: route-view-enter 240ms ease-out both;
-  will-change: opacity, transform;
-}
-.motion-off .workspace-body,
-.motion-off .feature-scroll {
-  animation: none;
-}
-@keyframes route-view-enter {
-  from { opacity: 0; transform: translateY(8px) scale(0.995); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .motion-on .workspace-body,
-  .motion-on .feature-scroll { animation: none; }
-}
-.feature-scroll {
+  .feature-scroll {
     padding: 20px 20px calc(70px + env(safe-area-inset-bottom));
   }
 }
@@ -2082,23 +2065,6 @@ button:disabled {
   .feature-tabs button span {
     font-size: 12px;
   }
-  .motion-on .workspace-body,
-.motion-on .feature-scroll {
-  animation: route-view-enter 240ms ease-out both;
-  will-change: opacity, transform;
-}
-.motion-off .workspace-body,
-.motion-off .feature-scroll {
-  animation: none;
-}
-@keyframes route-view-enter {
-  from { opacity: 0; transform: translateY(8px) scale(0.995); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .motion-on .workspace-body,
-  .motion-on .feature-scroll { animation: none; }
-}
   .feature-scroll {
     padding-left: 14px;
     padding-right: 14px;
@@ -2114,24 +2080,7 @@ button:disabled {
   .feature-tabs,
   .offline-banner,
   .health-card,
-  .motion-on .workspace-body,
-.motion-on .feature-scroll {
-  animation: route-view-enter 240ms ease-out both;
-  will-change: opacity, transform;
-}
-.motion-off .workspace-body,
-.motion-off .feature-scroll {
-  animation: none;
-}
-@keyframes route-view-enter {
-  from { opacity: 0; transform: translateY(8px) scale(0.995); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .motion-on .workspace-body,
-  .motion-on .feature-scroll { animation: none; }
-}
-.feature-scroll {
+  .feature-scroll {
     display: none;
   }
 }

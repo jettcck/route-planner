@@ -59,7 +59,12 @@ fun restoreNativeLibs() {
         if (!source.isFile || source.length() == 0L) return@forEach
 
         val dest = File(File(jniLibsDir, abi), "libroute_planner_lib.so")
-        if (dest.isFile && dest.length() == source.length()) return@forEach
+        // 只比长度是不够的：只改前端（被嵌进 .so 的静态资源）时体积可能一模一样，
+        // 上一版库就会被误判为"已是最新"，APK 里装的其实是旧前端。
+        // 因此改用「长度 + 修改时间」双重比较，任一不同即回填。
+        val sameSize = dest.isFile && dest.length() == source.length()
+        val notNewer = dest.isFile && dest.lastModified() >= source.lastModified()
+        if (sameSize && notNewer) return@forEach
 
         dest.parentFile?.mkdirs()
         dest.delete()

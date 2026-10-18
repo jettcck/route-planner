@@ -416,6 +416,17 @@
   cursor: pointer;
 }
 .auth-forgot:hover { color: #24543a; text-decoration: underline; }
+/* 单人私人版：注册入口关闭后显示说明，不占按钮视觉权重 */
+.auth-hint {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f2f7f3;
+  color: #4a6455;
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
 
 /* ---------------- 服务地址 ---------------- */
 .auth-endpoint {

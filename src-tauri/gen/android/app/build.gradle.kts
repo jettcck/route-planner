@@ -36,7 +36,9 @@ android {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
         applicationId = "com.luyou.planner"
         minSdk = 24
-        targetSdk = 35
+        // 与 compileSdk 对齐：Google Play 2025 起要求新应用 target 至少 35，
+        // 而对齐 36 可避免「编译用 36、运行按 35」的兼容分支差异。
+        targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
         buildConfigField("String", "UPDATE_REPOSITORY", "\"$updateRepository\"")
@@ -94,8 +96,11 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        // JDK 21 工具链下统一用 17：既是 AGP 8.x 的默认 target，
+        // 也能让 Java 与 Kotlin 两侧字节码版本一致（此前 1.8 会在部分
+        // 依赖上触发 "inconsistent JVM-target compatibility" 警告）。
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
         buildConfig = true
@@ -104,7 +109,7 @@ android {
 
 kotlin {
     compilerOptions {
-        jvmTarget = JvmTarget.JVM_1_8
+        jvmTarget = JvmTarget.JVM_17
     }
 }
 

@@ -104,6 +104,9 @@ async function ensureService() {
       AUTH_ORIGINS: "",
       AUTH_DATA_DIR: ownedDataDir,
       AUTH_LOG_LEVEL: "silent",
+      // 该测试用注册接口准备账号，因此显式开启公开注册（生产默认关闭）。
+      AUTH_ALLOW_PUBLIC_SIGNUP: "true",
+      AUTH_ALLOW_PASSWORD_RESET: "true",
     },
     stdio: ["ignore", "ignore", "ignore"],
   });

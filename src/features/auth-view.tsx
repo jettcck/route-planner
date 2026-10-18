@@ -36,6 +36,7 @@ import {
   type AuthUser,
   type Channel,
 } from "./auth";
+import { PUBLIC_SIGNUP_ENABLED, PASSWORD_RESET_ENABLED, SINGLE_USER, SMS_LOGIN_ENABLED } from "./app-mode";
 import "./auth.css";
 
 type Props = {
@@ -47,7 +48,8 @@ type Props = {
   storageError?: string | null;
 };
 
-const SMS_LOGIN_ENABLED = false;
+// 三个开关来自构建期模式：单人私人版全部关闭（无公开注册、无短信登录、无密码重置）。
+// 单用户版仍保留「邮箱+密码登录」，便于部署方自己创建的唯一账号登录。
 
 /* ------------------------------------------------------------------ 小部件 */
 
@@ -474,21 +476,25 @@ function LoginPanel({ onLoggedIn }: Pick<Props, "onLoggedIn">) {
             {!busy && <ArrowRight size={16} />}
           </button>
 
-          {!isRegister ? <button type="button" className="auth-forgot" onClick={() => { setResetEmail(email); setResetOpen(true); setNotice(null); }}>忘记密码？</button> : null}
+          {!isRegister && PASSWORD_RESET_ENABLED ? <button type="button" className="auth-forgot" onClick={() => { setResetEmail(email); setResetOpen(true); setNotice(null); }}>忘记密码？</button> : null}
 
-          <p className="auth-switch">
-            {isRegister ? "已有账号？" : "还没有账号？"}
-            <button
-              type="button"
-              onClick={() => {
-                setEmailMode(isRegister ? "login" : "register");
-                setNotice(null);
-                setErrors({});
-              }}
-            >
-              {isRegister ? "返回登录" : "立即注册"}
-            </button>
-          </p>
+          {PUBLIC_SIGNUP_ENABLED ? (
+            <p className="auth-switch">
+              {isRegister ? "已有账号？" : "还没有账号？"}
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailMode(isRegister ? "login" : "register");
+                  setNotice(null);
+                  setErrors({});
+                }}
+              >
+                {isRegister ? "返回登录" : "立即注册"}
+              </button>
+            </p>
+          ) : (
+            <p className="auth-hint">本机为单人私人版，账号由部署方创建；无需注册即可使用全部本机功能。</p>
+          )}
         </form>
       ) : (
         <form className="auth-form" onSubmit={submitPhone} noValidate>
@@ -642,7 +648,11 @@ function ProfilePanel({ user, onLogout, onCheckUpdate }: { user: AuthUser; onLog
         <h2>
           <UserRound size={18} /> {user.nickname ?? "途迹用户"}
         </h2>
-        <p>退出登录后需要重新登录才能进入行程工作区；本机行程、清单、记账、打卡和提醒数据会保留，重新登录后可继续使用。</p>
+        <p>
+          {SINGLE_USER
+            ? "退出后本机的行程、清单、记账、打卡和提醒数据仍然保留，随时可以继续使用；账号只用于可选的云端能力。"
+            : "退出登录后需要重新登录才能进入行程工作区；本机行程、清单、记账、打卡和提醒数据会保留，重新登录后可继续使用。"}
+        </p>
       </header>
 
       <dl className="auth-profile">
@@ -688,17 +698,27 @@ export function AccountView({ user, ready, onLoggedIn, onLogout, onCheckUpdate, 
       )}
       {storageError ? <p className="auth-notice is-err" role="alert">{storageError}</p> : null}
       <aside className="auth-aside">
-        <h3>为什么需要登录</h3>
+        <h3>{SINGLE_USER ? "账号是可选项" : "为什么需要登录"}</h3>
         <ul>
-          <li>账号用于登录身份和 AI 服务鉴权；当前版本的行程数据仍保存在本机，尚未接入云同步。</li>
-          <li>登录后可使用行程规划、打包清单、记账、打卡和出行提醒；退出登录不会删除本机数据。</li>
-          <li>当前支持 QQ 邮箱密码登录；手机号验证码登录暂未开放。</li>
+          {SINGLE_USER ? (
+            <>
+              <li>途迹的全部本机功能（行程、打包清单、记账、打卡、提醒）无需登录即可使用。</li>
+              <li>只有需要多设备同步或服务端 AI 时才需要登录；退出登录不会删除本机数据。</li>
+              <li>当前构建已关闭公开注册、短信登录与密码重置，账号由部署方在本机创建。</li>
+            </>
+          ) : (
+            <>
+              <li>账号用于登录身份和 AI 服务鉴权；当前版本的行程数据仍保存在本机，尚未接入云同步。</li>
+              <li>登录后可使用行程规划、打包清单、记账、打卡和出行提醒；退出登录不会删除本机数据。</li>
+              <li>当前支持 QQ 邮箱密码登录；手机号验证码登录暂未开放。</li>
+            </>
+          )}
         </ul>
         <h3>安全约定</h3>
         <ul>
           <li>密码用 scrypt + 随机盐存储，数据库里看不到明文。</li>
           <li>会话只保存令牌哈希；登出即刻失效。</li>
-          <li>连续输错 5 次锁定 15 分钟；短信登录暂未开放。</li>
+          <li>连续输错 5 次锁定 15 分钟。</li>
         </ul>
       </aside>
     </div>

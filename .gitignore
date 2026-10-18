@@ -38,6 +38,13 @@ deploy/data/
 *.sqlite-wal
 *.sqlite-shm
 
+# 真机/模拟器验收截图与录屏，只作本地证据，不进版本库
+/android-*.png
+/android-*.jpg
+/android-*.mp4
+# 临时调试目录
+.claude/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

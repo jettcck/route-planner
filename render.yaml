@@ -1,13 +1,30 @@
+# 账号服务（可选）：单人私人版**不需要**部署它。
+#
+# 部署原则（来自发布要求）
+# - 正式账号数据不得放在 Render 免费实例上：免费实例的磁盘是临时的，
+#   实例休眠/重建都会丢 data 目录，且没有备份保留期。
+# - 因此这里固定 starter 计划 + 持久磁盘；若只用本地单人版，可直接删除本文件。
+#
+# 如需真正上线：
+#   1) 在 Render 控制台把 route-planner-auth 的 Disk 挂到 /opt/render/project/src/server/data
+#   2) 用 `node server/create-account.mjs` 在本地创建账号后，把 accounts.json 上传到该磁盘
+#      （公开注册默认关闭，AUTH_ALLOW_PUBLIC_SIGNUP 保持未设置）
+#   3) AI_API_KEY 用 sync:false 在控制台手工填，不要写进仓库
 services:
   - type: web
     name: route-planner-auth
     runtime: node
-    plan: free
+    # free / hobby 的磁盘是临时的；正式账号数据必须落在持久盘上。
+    plan: starter
     region: singapore
     buildCommand: npm ci --omit=dev
     startCommand: node server/auth-server.mjs
     healthCheckPath: /readyz
     autoDeploy: true
+    disk:
+      name: route-auth-data
+      mountPath: /opt/render/project/src/server/data
+      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
@@ -19,6 +36,14 @@ services:
         value: https://tauri.localhost
       - key: AUTH_DATA_DIR
         value: /opt/render/project/src/server/data
+      # 单人版策略：公开注册 / 短信登录 / 自助密码重置默认全部关闭。
+      # 需要临时开放时在控制台设为 true，不要在仓库里写死。
+      - key: AUTH_ALLOW_PUBLIC_SIGNUP
+        sync: false
+      - key: AUTH_ALLOW_SMS_LOGIN
+        sync: false
+      - key: AUTH_ALLOW_PASSWORD_RESET
+        sync: false
       - key: AI_ENDPOINT
         value: https://api.deepseek.com/chat/completions
       - key: AI_MODEL

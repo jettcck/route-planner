@@ -8,7 +8,7 @@ const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "route-password-reset-"));
 const port = 19_000 + Math.floor(Math.random() * 500);
 const child = spawn(process.execPath, [path.resolve("server/auth-server.mjs")], {
   cwd: process.cwd(),
-  env: { ...process.env, NODE_ENV: "test", AUTH_HOST: "127.0.0.1", AUTH_PORT: String(port), AUTH_DATA_DIR: dataDir, AUTH_ORIGINS: "http://127.0.0.1:1420" },
+  env: { ...process.env, NODE_ENV: "test", AUTH_HOST: "127.0.0.1", AUTH_PORT: String(port), AUTH_DATA_DIR: dataDir, AUTH_ORIGINS: "http://127.0.0.1:1420", AUTH_ALLOW_PUBLIC_SIGNUP: "true", AUTH_ALLOW_PASSWORD_RESET: "true" },
   stdio: ["ignore", "pipe", "pipe"],
 });
 const waitForStart = new Promise((resolve, reject) => {

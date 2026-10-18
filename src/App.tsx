@@ -66,9 +66,21 @@ import {
   useStoredState,
 } from "./features/store";
 import { downloadText } from "./features/share";
+import {
+  ALL_SECTIONS,
+  BACKUP_FORMAT_ID,
+  BACKUP_SCHEMA_VERSION,
+  newSnapshotId,
+  writeSnapshot,
+} from "./features/backup";
+import { BackupPanel } from "./features/backup-view";
+import { LockScreen, LockSettings } from "./features/app-lock-view";
+import { readLockConfig } from "./features/app-lock";
+import "./features/backup.css";
 import { AccountView } from "./features/auth-view";
 import { authApi, useAuth } from "./features/auth";
 import { useUiFeedback } from "./features/ui-feedback";
+import { DEFAULT_VIEW, MULTI_PROVIDER_ENABLED, SINGLE_USER, requiresAccount } from "./features/app-mode";
 import { isAndroidSecureStore, readSecureEntry, writeSecure, deleteSecure } from "./features/secure-store";
 import { createWeatherRegistration, type WeatherMonitorStatus } from "./features/weather-registration";
 import { parseTripContent } from "./features/trip-generation";
@@ -93,6 +105,9 @@ import "./App.css";
 
 type ViewId = "trip" | "packing" | "ledger" | "checkin" | "prep" | "account";
 
+/** 构建期注入的应用版本（见 vite.config.ts）。 */
+const APP_VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "0.0.0";
+
 function AppSplash({ secureReady, minimumReady }: { secureReady: boolean; minimumReady: boolean }) {
   const status = !secureReady ? "正在恢复安全会话" : !minimumReady ? "正在准备行程空间" : "正在进入途迹";
   return (
@@ -114,8 +129,14 @@ const viewTabs: { id: ViewId; label: string; icon: typeof Map }[] = [
   { id: "ledger", label: "记账结算", icon: Coins },
   { id: "checkin", label: "打卡足迹", icon: Footprints },
   { id: "prep", label: "出行提醒", icon: Megaphone },
-  { id: "account", label: "账号", icon: KeyRound },
 ];
+// 单人私人版不再把「账号」放进主标签：账号是可选能力，入口收进「设置」。
+const accountTab: { id: ViewId; label: string; icon: typeof Map } = {
+  id: "account",
+  label: "账号",
+  icon: KeyRound,
+};
+const allViewTabs = [...viewTabs, accountTab];
 
 const preferences = ["美食", "人文", "自然", "亲子", "摄影", "购物"];
 type DestinationOption = {
@@ -376,11 +397,20 @@ const providers: Provider[] = [
   { id: "custom", name: "自定义兼容服务", endpoint: "https://", model: "", note: "填写服务方提供的接口地址和模型" },
 ];
 const defaultProvider = providers[0];
+/**
+ * 单人版只保留一个主要 AI 服务商。
+ * 默认 DeepSeek：接口兼容 OpenAI Chat Completions、国内可直连、价格低。
+ * 若 provider 列表里没有该 id，回退到列表首位，避免 undefined。
+ */
+const PRIMARY_PROVIDER_ID: ProviderId = "deepseek";
+const primaryProvider = providers.find((item) => item.id === PRIMARY_PROVIDER_ID) ?? defaultProvider;
 function storedString(key: string, fallback: string) {
   const value = stored<unknown>(key, fallback);
   return typeof value === "string" ? value : fallback;
 }
 function storedProviderId(): ProviderId {
+  // 单人版锁定单一服务商：即使旧版本存过别的 id，也回落到主服务商。
+  if (!MULTI_PROVIDER_ENABLED) return primaryProvider.id;
   const value = stored<unknown>("route-ai-provider", defaultProvider.id);
   return providers.some((provider) => provider.id === value)
     ? value as ProviderId
@@ -712,12 +742,16 @@ function PlannerApp() {
     storedProviderId(),
   );
   const [endpoint, setEndpoint] = useState(() =>
-    storedString("route-ai-endpoint", defaultProvider.endpoint),
+    storedString("route-ai-endpoint", MULTI_PROVIDER_ENABLED ? defaultProvider.endpoint : primaryProvider.endpoint),
   );
   const [model, setModel] = useState(() =>
-    storedString("route-ai-model", defaultProvider.model),
+    storedString("route-ai-model", MULTI_PROVIDER_ENABLED ? defaultProvider.model : primaryProvider.model),
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 应用锁：冷启动时若已启用则先锁住；回来时（后台超过 60 秒）再次上锁。
+  const [lockEnabled, setLockEnabled] = useState(false);
+  const [locked, setLocked] = useState(false);
+  const hiddenAt = useRef(0);
   const [availableUpdate, setAvailableUpdate] = useState<Update | null>(null);
   const [androidUpdate, setAndroidUpdate] = useState<AndroidUpdate | null>(null);
   const [updateBusy, setUpdateBusy] = useState(false);
@@ -760,7 +794,7 @@ function PlannerApp() {
   const [locationCoords, setLocationCoords] = useState<{ latitude: number; longitude: number }>();
   const [destinationFocused, setDestinationFocused] = useState(false);
   const [highlightedDestination, setHighlightedDestination] = useState(0);
-  const [view, setView] = useState<ViewId>("trip");
+  const [view, setView] = useState<ViewId>(() => DEFAULT_VIEW);
   const [packingRevision, setPackingRevision] = useState(0);
   // 账号态：登录只负责账号服务；本机离线功能不因登出而丢失。
   const auth = useAuth();
@@ -782,7 +816,36 @@ function PlannerApp() {
     const timer = window.setTimeout(() => setStartupMinimumReady(true), 650);
     return () => window.clearTimeout(timer);
   }, []);
-  const displayView = auth.user ? view : "account";
+  // 单人私人版：账号页不是落地页，也不参与展示门控。
+  // 多用户构建：未登录时只能看到账号页。
+  const accountGate = requiresAccount() && !auth.user;
+  const displayView: ViewId = accountGate ? "account" : view;
+  // 应用锁启动检查：读一次配置，启用则立即上锁（不等其它异步初始化）。
+  useEffect(() => {
+    let alive = true;
+    void readLockConfig().then((config) => {
+      if (!alive) return;
+      const enabled = Boolean(config?.enabled);
+      setLockEnabled(enabled);
+      if (enabled) setLocked(true);
+    });
+    return () => { alive = false; };
+  }, []);
+  // 回到前台：后台超过 60 秒就重新上锁，短暂切走（回消息/看时间）不打断。
+  useEffect(() => {
+    if (!lockEnabled) return;
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt.current = Date.now();
+        return;
+      }
+      if (hiddenAt.current && Date.now() - hiddenAt.current > 60_000) setLocked(true);
+      hiddenAt.current = 0;
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [lockEnabled]);
+  const visibleViewTabs = SINGLE_USER ? viewTabs : allViewTabs;
   const [online, setOnline] = useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
@@ -1090,7 +1153,7 @@ function PlannerApp() {
     setInput((previous) => ({ ...previous, [key]: value }));
   }
   useEffect(() => {
-    if (!auth.user && view !== "account") {
+    if (requiresAccount() && !auth.user && view !== "account") {
       play("switch");
       setView("account");
     }
@@ -1281,7 +1344,7 @@ function PlannerApp() {
     setSettingsOpen(false);
     setTutorialStep(0);
   }
-  const provider = providers.find((item) => item.id === providerId) ?? defaultProvider;
+  const provider = providers.find((item) => item.id === providerId) ?? primaryProvider;
   const apiKey = apiKeys[providerId] ?? "";
   function beginUpdateOperation() {
     if (updateOperationLock.current) return false;
@@ -1433,6 +1496,7 @@ function PlannerApp() {
         input.days,
       );
       if (!firstStatus.over) {
+        snapshotBeforeReplace("AI 生成行程");
         setTrip({ ...first, sample: false });
         setActiveDay(0);
         setBudgetNotice(budgetPlanAdvice(firstStatus, input));
@@ -1459,6 +1523,7 @@ function PlannerApp() {
         input.travelers,
         input.days,
       );
+      snapshotBeforeReplace("AI 按预算重排");
       setTrip({ ...picked.trip, sample: false });
       setActiveDay(0);
       play(picked.stillOver ? "error" : "success");
@@ -1528,7 +1593,7 @@ function PlannerApp() {
       }),
     }));
   }
-  function exportJson() {
+  async function exportJson() {
     const packingKey = `route-packing:${tripNamespace(trip)}`;
     const packing = loadStored<PackingItem[]>(packingKey, [], sanitizePackingItems);
     const payload = {
@@ -1542,13 +1607,18 @@ function PlannerApp() {
       prepState,
       packing,
     };
-    downloadText(
-      `${trip.destination || "旅行"}-途迹备份.json`,
-      JSON.stringify(payload, null, 2),
-      "application/json;charset=utf-8",
-    );
+    try {
+      await downloadText(
+        `${trip.destination || "旅行"}-途迹备份.json`,
+        JSON.stringify(payload, null, 2),
+        "application/json;charset=utf-8",
+      );
+      setError("已生成行程备份 JSON；如需换机恢复，请用「设置 → 数据备份与恢复」导出 .routebackup");
+    } catch (reason) {
+      setError(`导出失败：${reason instanceof Error ? reason.message : String(reason)}`);
+    }
   }
-  function exportPlacesCsv() {
+  async function exportPlacesCsv() {
     const csvCell = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
     const rows = [
       ["天数", "时间", "类型", "名称", "地点", "停留分钟", "预计费用", "备注"],
@@ -1565,13 +1635,18 @@ function PlannerApp() {
         ]),
       ),
     ];
-    downloadText(
-      `${trip.destination || "旅行"}-地点清单.csv`,
-      `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\n")}\n`,
-      "text/csv;charset=utf-8",
-    );
+    try {
+      await downloadText(
+        `${trip.destination || "旅行"}-地点清单.csv`,
+        `\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\n")}\n`,
+        "text/csv;charset=utf-8",
+      );
+      setError("地点清单 CSV 已生成");
+    } catch (reason) {
+      setError(`导出失败：${reason instanceof Error ? reason.message : String(reason)}`);
+    }
   }
-  function exportCalendar() {
+  async function exportCalendar() {
     const escapeIcs = (value: string) => value.replace(/[\\;,]/g, (match) => `\\${match}`).replace(/\r?\n/g, "\\n");
     const toUtcStamp = (date: string, time: string) => {
       const parsed = new Date(`${date}T${/^\d{2}:\d{2}$/.test(time) ? time : "09:00"}:00`);
@@ -1600,74 +1675,103 @@ function PlannerApp() {
         ].join("\r\n");
       }),
     );
-    downloadText(
-      `${trip.destination || "旅行"}-行程日历.ics`,
-      `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Luyou Route//Trip Planner//CN\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n${events.join("\r\n")}\r\nEND:VCALENDAR\r\n`,
-      "text/calendar;charset=utf-8",
-    );
-  }
-  async function importBackup(file: File) {
     try {
-      if (file.size > 5 * 1024 * 1024) throw new Error("备份文件不能超过 5 MB");
-      const payload = JSON.parse(await file.text()) as {
-        schemaVersion?: unknown;
-        trip?: unknown;
-        input?: Partial<PlannerInput>;
-        weather?: Weather[];
-        expenses?: Expense[];
-        checkIns?: CheckInMap;
-        prepState?: Record<string, boolean>;
-        packing?: PackingItem[];
-      };
-      if (payload.schemaVersion !== undefined &&
-        (typeof payload.schemaVersion !== "number" || !Number.isInteger(payload.schemaVersion) || payload.schemaVersion < 1 || payload.schemaVersion > 3)) {
-        throw new Error("备份版本不受当前应用支持");
-      }
+      await downloadText(
+        `${trip.destination || "旅行"}-行程日历.ics`,
+        `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Luyou Route//Trip Planner//CN\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n${events.join("\r\n")}\r\nEND:VCALENDAR\r\n`,
+        "text/calendar;charset=utf-8",
+      );
+      setError("行程日历 .ics 已生成，可导入系统日历");
+    } catch (reason) {
+      setError(`导出失败：${reason instanceof Error ? reason.message : String(reason)}`);
+    }
+  }
+  /**
+   * 恢复核心：整包校验 → 先存快照 → 全量写入 → 任一失败即回滚。
+   *
+   * 两条入口共用它：
+   *  - 导入 .routebackup 文件
+   *  - 回滚本机快照
+   *
+   * 返回空串表示成功；任何失败都返回可读原因，并且**保证**本机数据回到调用前状态。
+   */
+  async function restoreFromData(
+    payload: {
+      trip?: unknown;
+      input?: unknown;
+      weather?: unknown;
+      expenses?: unknown;
+      checkIns?: unknown;
+      prepState?: unknown;
+      packing?: unknown;
+    },
+    origin: string,
+  ): Promise<string> {
+    try {
       const parsedTrip = tripSchema.safeParse(payload.trip);
-      if (!parsedTrip.success) throw new Error("行程结构无效");
+      if (!parsedTrip.success) return "行程结构无效，未做任何改动";
+
       let parsedInput: PlannerInput | undefined;
       if (payload.input !== undefined) {
         if (!payload.input || typeof payload.input !== "object" || Array.isArray(payload.input)) {
-          throw new Error("备份中的规划条件无效");
+          return "备份中的规划条件无效";
         }
-        const result = plannerInputSchema.safeParse({ ...input, ...payload.input });
-        if (!result.success) throw new Error("备份中的规划条件无效");
+        const result = plannerInputSchema.safeParse({ ...input, ...(payload.input as Partial<PlannerInput>) });
+        if (!result.success) return "备份中的规划条件无效";
         parsedInput = result.data;
       }
+
       const importedWeather = payload.weather === undefined
         ? undefined
         : Array.isArray(payload.weather) && payload.weather.length <= 100 && payload.weather.every(isBackupWeather)
-          ? payload.weather
-          : (() => { throw new Error("备份中的天气数据无效"); })();
+          ? (payload.weather as Weather[])
+          : null;
+      if (importedWeather === null) return "备份中的天气数据无效";
+
       const importedExpenses = payload.expenses === undefined
         ? undefined
         : Array.isArray(payload.expenses) && payload.expenses.length <= 1_000 && payload.expenses.every(isBackupExpense) &&
-          new Set(payload.expenses.map((item) => item.id)).size === payload.expenses.length &&
-          sanitizeExpenses(payload.expenses)?.length === payload.expenses.length
-          ? sanitizeExpenses(payload.expenses)!
-          : (() => { throw new Error("备份中的记账数据无效"); })();
+          new Set(payload.expenses.map((item) => (item as Expense).id)).size === payload.expenses.length &&
+          sanitizeExpenses(payload.expenses as Expense[])?.length === payload.expenses.length
+          ? sanitizeExpenses(payload.expenses as Expense[])!
+          : null;
+      if (importedExpenses === null) return "备份中的记账数据无效";
+
       const importedCheckIns = payload.checkIns === undefined
         ? undefined
-        : isBackupCheckIns(payload.checkIns) && Object.keys(sanitizeCheckIns(payload.checkIns) ?? {}).length === Object.keys(payload.checkIns).length
+        : isBackupCheckIns(payload.checkIns) &&
+          Object.keys(sanitizeCheckIns(payload.checkIns) ?? {}).length === Object.keys(payload.checkIns).length
           ? sanitizeCheckIns(payload.checkIns)!
-          : (() => { throw new Error("备份中的打卡数据无效"); })();
+          : null;
+      if (importedCheckIns === null) return "备份中的打卡数据无效";
+
       const importedPrepState = payload.prepState === undefined
         ? undefined
         : isBackupPrepState(payload.prepState) && sanitizePrepState(payload.prepState) &&
           Object.keys(sanitizePrepState(payload.prepState)!).length === Object.keys(payload.prepState).length
           ? sanitizePrepState(payload.prepState)!
-          : (() => { throw new Error("备份中的待办数据无效"); })();
+          : null;
+      if (importedPrepState === null) return "备份中的待办数据无效";
+
       const importedPacking = payload.packing === undefined
         ? undefined
         : isBackupPackingItems(payload.packing) && sanitizePackingItems(payload.packing)?.length === payload.packing.length
           ? sanitizePackingItems(payload.packing)!
-          : (() => { throw new Error("备份中的打包清单无效"); })();
-      // Validate the complete import before mutating any state so a malformed
-      // input section cannot leave the trip and planning conditions half-imported.
-      // Persist trip-scoped sections under the imported namespace before changing
-      // `trip`. React state setters still point at the old namespace until the
-      // next render, so writing through them here would silently attach imported
-      // data to the previous trip.
+          : null;
+      if (importedPacking === null) return "备份中的打包清单无效";
+
+      // 全部校验通过后，才允许写任何东西。
+      const currentPacking = loadStored<PackingItem[]>(`route-packing:${namespace}`, [], sanitizePackingItems);
+      writeSnapshotFor("恢复前自动留档", {
+        trip,
+        input,
+        weather,
+        expenses,
+        checkIns,
+        prepState,
+        packing: currentPacking,
+      });
+
       const importedNamespace = tripNamespace(parsedTrip.data);
       const importedKeys = {
         expenses: `route-ledger:${importedNamespace}`,
@@ -1680,9 +1784,7 @@ function PlannerApp() {
       try {
         const persistImported = (key: string, value: unknown, message: string) => {
           previousRaw.set(key, localStorage.getItem(key));
-          // Track the key before writing. Some storage implementations can
-          // mutate successfully and still throw (for example quota wrappers),
-          // so rollback must cover the failed write as well.
+          // 先登记再写：某些存储实现会「写入成功但随后抛错」，回滚必须覆盖它。
           touchedKeys.push(key);
           if (!saveJson(key, value)) throw new Error(message);
         };
@@ -1703,17 +1805,17 @@ function PlannerApp() {
           persistImported(importedKeys.packing, importedPacking, "设备存储空间不足，无法导入打包清单");
         }
       } catch (reason) {
-        // localStorage can fail after one section has already been written.
-        // Restore every touched key so an import is all-or-nothing.
+        // 部分写入后失败：把每个被碰过的键还原，保证「要么全成功，要么全不变」。
         for (const key of touchedKeys) {
           const raw = previousRaw.get(key);
           try {
             if (raw === null || raw === undefined) localStorage.removeItem(key);
             else localStorage.setItem(key, raw);
-          } catch { /* keep the original error */ }
+          } catch { /* 保留原始错误 */ }
         }
         throw reason;
       }
+
       if (importedNamespace === namespace) {
         if (importedExpenses !== undefined) setExpenses(importedExpenses);
         if (importedCheckIns !== undefined) setCheckIns(importedCheckIns);
@@ -1721,18 +1823,13 @@ function PlannerApp() {
         if (importedPacking !== undefined) setPackingRevision((value) => value + 1);
       }
       let importedWeatherSaved = true;
-      // A shorter imported trip cannot retain the old day index: rendering
-      // used to clamp the visible day while edits still targeted that index.
+      // 行程变短后旧的天索引不能保留：渲染会被 clamp，但编辑仍指向那个索引。
       setActiveDay(0);
       setEditing(null);
       setTrip(parsedTrip.data);
       if (parsedInput) setInput(parsedInput);
       if (importedWeather !== undefined) {
-        // Keep an imported forecast visible while the fresh request for the
-        // new trip is in flight. The weather effect normally clears a changed
-        // query key to prevent stale data; advance that key together with the
-        // imported snapshot so it is treated as the new trip's temporary
-        // cache rather than as the previous trip's forecast.
+        // 让导入的天气快照被当成新行程的临时缓存，而不是上一个行程的过期数据。
         const importedDates = parsedTrip.data.days.map((item) => item.date).join(",");
         importedWeatherSaved = saveWeatherBackup(
           parsedTrip.data.destination,
@@ -1747,12 +1844,132 @@ function PlannerApp() {
         setWeatherStale(true);
       }
       setError(importedWeatherSaved
-        ? "行程备份已导入"
-        : "行程备份已导入，但天气快照未能保存；联网后会重新获取天气");
+        ? `${origin} 已完成恢复`
+        : `${origin} 已恢复，但天气快照未能保存；联网后会重新获取`);
+      return "";
+    } catch (reason) {
+      return `${origin} 恢复失败：${reason instanceof Error ? reason.message : "文件格式不正确"}`;
+    }
+  }
+
+  /** 以旧 .json 备份格式读取并转为统一结构，兼容 0.3.9 之前导出的文件。 */
+  async function importBackup(file: File) {
+    try {
+      if (file.size > 5 * 1024 * 1024) throw new Error("备份文件不能超过 5 MB");
+      const text = await file.text();
+      const raw = JSON.parse(text) as {
+        schemaVersion?: unknown;
+        trip?: unknown;
+        input?: unknown;
+        weather?: unknown;
+        expenses?: unknown;
+        checkIns?: unknown;
+        prepState?: unknown;
+        packing?: unknown;
+      };
+      // .routebackup（含加密包）优先；解析器会自行校验 checksum / AEAD。
+      if (raw && typeof raw === "object" && (raw as { format?: unknown }).format === BACKUP_FORMAT_ID) {
+        setError("请用「设置 → 数据备份与恢复」导入 .routebackup 文件；加密备份需要在那里输入口令");
+        return;
+      }
+      if (raw.schemaVersion !== undefined &&
+        (typeof raw.schemaVersion !== "number" || !Number.isInteger(raw.schemaVersion) || raw.schemaVersion < 1 || raw.schemaVersion > 3)) {
+        throw new Error("备份版本不受当前应用支持");
+      }
+      const tripParsed = tripSchema.safeParse(raw.trip);
+      if (!tripParsed.success) throw new Error("行程结构无效");
+      const failure = await restoreFromData(raw, "行程备份");
+      if (failure) throw new Error(failure.replace(/^行程备份 恢复失败：/, ""));
     } catch (reason) {
       setError(`导入失败：${reason instanceof Error ? reason.message : "文件格式不正确"}`);
     }
   }
+
+  /**
+   * 写一个滚动快照。存储写满时**不静默**：快照是误操作的最后一道保护，
+   * 它失败必须让用户知道，否则下一次覆盖就不可逆了。
+   */
+  function writeSnapshotFor(label: string, data: {
+    trip: Trip;
+    input: PlannerInput;
+    weather: Weather[];
+    expenses: Expense[];
+    checkIns: CheckInMap;
+    prepState: Record<string, boolean>;
+    packing: PackingItem[];
+  }) {
+    const id = newSnapshotId();
+    const createdAt = new Date().toISOString();
+    const counts = [
+      { label: "行程天数", count: data.trip.days.length },
+      { label: "活动条目", count: data.trip.days.reduce((sum, day) => sum + day.activities.length, 0) },
+      { label: "记账明细", count: data.expenses.length },
+      { label: "打卡记录", count: Object.keys(data.checkIns).length },
+      { label: "打包清单", count: data.packing.length },
+    ];
+    const ok = writeSnapshot(
+      {
+        id,
+        createdAt,
+        appVersion: APP_VERSION,
+        sections: [...ALL_SECTIONS],
+        counts,
+      },
+      {
+        schemaVersion: BACKUP_SCHEMA_VERSION,
+        appVersion: APP_VERSION,
+        createdAt,
+        sections: [...ALL_SECTIONS],
+        data: {
+          trip: data.trip,
+          input: data.input,
+          weather: data.weather,
+          expenses: data.expenses,
+          checkIns: data.checkIns,
+          prepState: data.prepState,
+          packing: data.packing,
+        },
+      },
+    );
+    if (!ok) {
+      setError(`${label}的快照未能保存（设备存储可能已满）。建议先导出备份再继续。`);
+    }
+    return ok;
+  }
+
+  /**
+   * 「重要修改」前的自动留档。
+   *
+   * 触发点：AI 生成行程、AI 按预算重排、导入/快照恢复（后者在 restoreFromData 内）。
+   * 不覆盖手动微调（编辑单个活动/记账）——那类改动频次高，会把 5 个名额迅速刷掉，
+   * 反而丢掉真正有价值的旧版本。
+   */
+  function snapshotBeforeReplace(label: string) {
+    if (trip.sample) return; // 示例行程没有留档价值，别挤掉真实数据的名额
+    writeSnapshotFor(label, {
+      trip,
+      input,
+      weather,
+      expenses,
+      checkIns,
+      prepState,
+      packing: loadStored<PackingItem[]>(`route-packing:${namespace}`, [], sanitizePackingItems),
+    });
+  }
+
+  function collectBackupSource() {
+    const packingKey = `route-packing:${namespace}`;
+    return {
+      trip,
+      plannerInput: input,
+      weather,
+      expenses,
+      checkIns,
+      prepState,
+      packing: loadStored<PackingItem[]>(packingKey, [], sanitizePackingItems),
+    };
+  }
+
   const dayWeather = weather.find((item) => item.date === day?.date);
   const mapActivities = trip.days.flatMap((item) => item.activities);
   const mapLocations = mapActivities
@@ -1831,6 +2048,7 @@ function PlannerApp() {
       {(!auth.ready || !startupMinimumReady) && (
         <AppSplash secureReady={auth.ready} minimumReady={startupMinimumReady} />
       )}
+      {locked ? <LockScreen onUnlock={() => setLocked(false)} /> : null}
       <div className={`app-shell${uiPreferences.motionEnabled ? " motion-on" : " motion-off"}`}>
       <aside className="sidebar">
         <div className="brand">
@@ -1842,7 +2060,7 @@ function PlannerApp() {
           </span>
         </div>
         <div className="sidebar-label">工作空间</div>
-        {viewTabs.map((tab) => {
+        {visibleViewTabs.map((tab) => {
           const Icon = tab.icon;
           return (
             <button
@@ -1850,7 +2068,7 @@ function PlannerApp() {
               className={`nav-item nav-button${displayView === tab.id ? " active" : ""}`}
               onClick={() => {
                 play("click");
-                if (tab.id !== "account" && !auth.user) {
+                if (requiresAccount() && tab.id !== "account" && !auth.user) {
                   play("error");
                   setError("请先登录账号后使用行程功能");
                   setView("account");
@@ -1978,7 +2196,7 @@ function PlannerApp() {
           </div>
         )}
         <nav className="feature-tabs" aria-label="功能导航">
-          {viewTabs.map((tab) => {
+          {visibleViewTabs.map((tab) => {
             const Icon = tab.icon;
             return (
               <button
@@ -1986,7 +2204,7 @@ function PlannerApp() {
                 className={displayView === tab.id ? "active" : ""}
                 aria-current={displayView === tab.id}
                 onClick={() => {
-                  if (tab.id !== "account" && !auth.user) {
+                  if (requiresAccount() && tab.id !== "account" && !auth.user) {
                     setError("请先登录账号后使用行程功能");
                     setView("account");
                     return;
@@ -2795,6 +3013,55 @@ function PlannerApp() {
                 播放测试音
               </button>
             </section>
+            <section className="ui-preferences" aria-label="账号与同步">
+              <div className="ui-preferences__head">
+                <div>
+                  <strong>账号（可选）</strong>
+                  <small>
+                    途迹的本机功能不依赖账号；只有需要多设备同步或服务端 AI 时才登录。
+                  </small>
+                </div>
+              </div>
+              <button
+                className="ui-test-sound"
+                type="button"
+                onClick={() => {
+                  flushAiKeysWrite();
+                  setSettingsOpen(false);
+                  setView("account");
+                }}
+              >
+                {auth.user ? `已登录：${auth.user.nickname || auth.user.email || auth.user.phone || "账号"}` : "打开账号页"}
+              </button>
+            </section>
+            <section className="ui-preferences" aria-label="应用锁">
+              <div className="ui-preferences__head">
+                <div>
+                  <strong>隐私与安全</strong>
+                  <small>手机可能被家人孩子拿到时，可加一道应用锁</small>
+                </div>
+              </div>
+              <LockSettings enabled={lockEnabled} onEnabledChange={setLockEnabled} />
+            </section>
+            <section className="ui-preferences backup-host" aria-label="数据备份与恢复">
+              <div className="ui-preferences__head">
+                <div>
+                  <strong>数据备份与恢复</strong>
+                  <small>
+                    行程、记账、清单、打卡都在本机。换手机或重装前请先导出一份 .routebackup。
+                  </small>
+                </div>
+              </div>
+              <BackupPanel
+                appVersion={APP_VERSION}
+                destination={trip.destination}
+                buildSource={collectBackupSource}
+                onRestore={async (data, _sections, origin) => {
+                  flushAiKeysWrite();
+                  return restoreFromData(data as Parameters<typeof restoreFromData>[0], origin);
+                }}
+              />
+            </section>
             {nativeAiSettings ? <div className="settings-help">
               <strong>第一次使用？</strong>
               <span>选择服务商后，打开对应页面创建 API Key，复制后粘贴到下方。各服务的计费和额度独立。</span>
@@ -2808,7 +3075,7 @@ function PlannerApp() {
             {nativeAiSettings ? <label className="field">
               <span>AI 服务商</span>
               <select value={providerId} onChange={(event) => selectProvider(event.target.value as ProviderId)}>
-                {providers.map((item) => (
+                {(MULTI_PROVIDER_ENABLED ? providers : providers.filter((item) => item.id === PRIMARY_PROVIDER_ID)).map((item) => (
                   <option key={item.id} value={item.id}>{item.name}</option>
                 ))}
               </select>

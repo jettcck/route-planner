@@ -59,7 +59,7 @@ const upstream = http.createServer(async (req, res) => {
 const upstreamPort = await listen(upstream);
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "route-auth-test-"));
 const authPort = 18_000 + Math.floor(Math.random() * 1_000);
-const child = spawn(process.execPath, [path.resolve("server/auth-server.mjs")], { cwd: process.cwd(), env: { ...process.env, NODE_ENV: "test", AUTH_HOST: "127.0.0.1", AUTH_PORT: String(authPort), AUTH_DATA_DIR: dataDir, AUTH_ORIGINS: "http://127.0.0.1:1420", AI_API_KEY: "test-ai-key", AI_ENDPOINT: `http://127.0.0.1:${upstreamPort}/chat/completions`, AI_MODEL: "test-model" }, stdio: ["ignore", "pipe", "pipe"] });
+const child = spawn(process.execPath, [path.resolve("server/auth-server.mjs")], { cwd: process.cwd(), env: { ...process.env, NODE_ENV: "test", AUTH_HOST: "127.0.0.1", AUTH_PORT: String(authPort), AUTH_DATA_DIR: dataDir, AUTH_ORIGINS: "http://127.0.0.1:1420", AUTH_ALLOW_PUBLIC_SIGNUP: "true", AI_API_KEY: "test-ai-key", AI_ENDPOINT: `http://127.0.0.1:${upstreamPort}/chat/completions`, AI_MODEL: "test-model" }, stdio: ["ignore", "pipe", "pipe"] });
 try {
   await waitForStart(child);
   const base = `http://127.0.0.1:${authPort}`;

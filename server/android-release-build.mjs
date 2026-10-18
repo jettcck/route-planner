@@ -90,6 +90,10 @@ function capture(command, args, env = process.env, cwd = root) {
 const localBuildEnv = {
   ...process.env,
   VITE_ENABLE_ANDROID_DIAGNOSTICS: "true",
+  // 本地验收包默认按"单人私人版"构建：本地验收要验的正是这条路径。
+  // 不能只依赖 .env —— Vite 的 .env 加载顺序可能被覆盖，且本地 .env 常被手工改动，
+  // 一旦缺失，装出来的包会退回到要求登录，验收结论就失去意义。
+  VITE_ANDROID_SINGLE_USER: process.env.VITE_ANDROID_SINGLE_USER?.trim() || "true",
   // Keep local emulator acceptance deterministic: 10.0.2.2 resolves to the
   // Windows host from Android. An explicit value still wins for LAN testing.
   VITE_AUTH_ENDPOINT: process.env.VITE_AUTH_ENDPOINT?.trim() || "http://10.0.2.2:8787",
@@ -111,6 +115,9 @@ if (!fs.existsSync(llvmBin)) throw new Error(`NDK LLVM 工具链不存在：${ll
 
 const buildEnv = {
   ...process.env,
+  // cargo 在编译期把 dist 嵌进 .so，带上是防御性的：万一有人跳过 npm run build
+  // 直接调 cargo，也不会因为缺这个变量而把登录墙打进包里。
+  VITE_ANDROID_SINGLE_USER: localBuildEnv.VITE_ANDROID_SINGLE_USER,
   // Keep the Gradle fallback-copy hook aligned with the ABI set compiled
   // above. Without this, a targeted fast build can accidentally restore stale
   // native libraries from a previous full build into the APK.

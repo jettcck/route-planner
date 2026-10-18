@@ -34,6 +34,12 @@ const AI_ENDPOINT = String(process.env.AI_ENDPOINT || "https://api.deepseek.com/
 const AI_MODEL = String(process.env.AI_MODEL || "deepseek-chat").trim();
 const HAS_EXPLICIT_AUTH_ORIGINS = Boolean(String(process.env.AUTH_ORIGINS || "").trim());
 const LOG_LEVEL = String(process.env.AUTH_LOG_LEVEL || (NODE_ENV === "production" ? "info" : "debug")).trim().toLowerCase();
+// 单人私人版的账号策略：默认关闭公开注册，账号只能由部署方在本机创建
+// （见 server/create-account.mjs 或 AUTH_ALLOW_PUBLIC_SIGNUP=true 的临时开启）。
+// 三个功能开关都是「默认安全」：不配置即为关闭。
+const ALLOW_PUBLIC_SIGNUP = String(process.env.AUTH_ALLOW_PUBLIC_SIGNUP || "").trim().toLowerCase() === "true";
+const ALLOW_SMS_LOGIN = String(process.env.AUTH_ALLOW_SMS_LOGIN || "").trim().toLowerCase() === "true";
+const ALLOW_PASSWORD_RESET = String(process.env.AUTH_ALLOW_PASSWORD_RESET || "").trim().toLowerCase() === "true";
 const LOG_LEVELS = { silent: 0, error: 1, info: 2, debug: 3 };
 const activeLogLevel = LOG_LEVELS[LOG_LEVEL] ?? LOG_LEVELS.info;
 const TAURI_APP_ORIGINS = new Set(["http://tauri.localhost", "https://tauri.localhost"]);
@@ -576,7 +582,16 @@ async function route(req, res) {
   }
   const ip = req.socket.remoteAddress || "unknown";
   if (req.method === "GET" && pathName === "/healthz") {
-    return json(res, 200, ok({ service: "route-auth", aiConfigured: Boolean(AI_API_KEY) }));
+    // capabilities 让前端能按服务端真实策略渲染登录面板，而不是假设注册一定开放。
+    return json(res, 200, ok({
+      service: "route-auth",
+      aiConfigured: Boolean(AI_API_KEY),
+      capabilities: {
+        signup: ALLOW_PUBLIC_SIGNUP,
+        sms: ALLOW_SMS_LOGIN,
+        passwordReset: ALLOW_PASSWORD_RESET,
+      },
+    }));
   }
   if (req.method === "GET" && pathName === "/livez") {
     return json(res, 200, ok({ service: "route-auth", live: true }));
@@ -588,6 +603,10 @@ async function route(req, res) {
       : fail("NOT_READY", "生产环境尚未配置 AI 服务", 503).body);
   }
   if (req.method === "POST" && pathName === "/api/auth/code/send") {
+    // 短信登录默认关闭：单人版不需要，且需要短信通道才能真正可用。
+    if (!ALLOW_SMS_LOGIN) {
+      return json(res, 410, fail("SMS_DISABLED", "短信登录暂未开放，请使用 QQ 邮箱和密码登录", 410).body);
+    }
     return json(res, 410, fail("SMS_DISABLED", "短信登录暂未开放，请使用 QQ 邮箱和密码登录", 410).body);
     /*
     const target = body.channel === "sms" ? normalizePhone(body.target) : normalizeEmail(body.target);
@@ -600,6 +619,10 @@ async function route(req, res) {
     */
   }
   if (req.method === "POST" && pathName === "/api/auth/email/register") {
+    // 单人私人版默认关闭公开注册：这是最容易被滥用的入口。
+    if (!ALLOW_PUBLIC_SIGNUP) {
+      return json(res, 403, fail("SIGNUP_DISABLED", "本服务已关闭公开注册，账号由部署方创建", 403).body);
+    }
     const email = normalizeEmail(body.email); const password = String(body.password || ""); const error = validateCredentials(email, password);
     if (error) return json(res, 400, fail("INVALID_INPUT", error).body);
     if (!rateLimit(`register:${ip}`, 60_000, 5)) return limited(res, "RATE_LIMITED", "请求过于频繁，请稍后再试");
@@ -637,6 +660,9 @@ async function route(req, res) {
     return json(res, 200, ok(sessionFor(user)));
   }
   if (req.method === "POST" && pathName === "/api/auth/password/reset/send") {
+    if (!ALLOW_PASSWORD_RESET) {
+      return json(res, 403, fail("RESET_DISABLED", "本服务已关闭自助密码重置，请联系部署方", 403).body);
+    }
     const email = normalizeEmail(body.email);
     const inputError = validateCredentials(email, "ResetPass123");
     if (inputError && !/^密码/.test(inputError)) return json(res, 400, fail("INVALID_INPUT", "QQ 邮箱格式不正确").body);
@@ -652,6 +678,9 @@ async function route(req, res) {
     return json(res, 200, ok(payload));
   }
   if (req.method === "POST" && pathName === "/api/auth/password/reset") {
+    if (!ALLOW_PASSWORD_RESET) {
+      return json(res, 403, fail("RESET_DISABLED", "本服务已关闭自助密码重置，请联系部署方", 403).body);
+    }
     const email = normalizeEmail(body.email);
     const code = String(body.code || "");
     const password = String(body.password || "");
@@ -676,6 +705,9 @@ async function route(req, res) {
     return json(res, 200, ok({ action: "password_reset" }));
   }
   if (req.method === "POST" && pathName === "/api/auth/code/login") {
+    if (!ALLOW_SMS_LOGIN) {
+      return json(res, 410, fail("SMS_DISABLED", "短信登录暂未开放，请使用 QQ 邮箱和密码登录", 410).body);
+    }
     return json(res, 410, fail("SMS_DISABLED", "短信登录暂未开放，请使用 QQ 邮箱和密码登录", 410).body);
     /*
     const target = normalizePhone(body.target); const record = db.codes.find((item) => item.target === target && !item.used && item.expiresAt > Date.now());

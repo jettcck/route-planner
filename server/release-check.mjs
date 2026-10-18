@@ -435,4 +435,58 @@ if (!authServerSource.includes("AUTH_ORIGINS.has(\"*\")") ||
   console.error("Development CORS port reuse must stay loopback-only and disabled by explicit or production configuration");
   process.exit(1);
 }
+// 单人私人版开关：GitHub Actions 不会读取 .env，必须由 workflow 显式注入。
+// 允许两种写法（"true" 加引号 / 裸 true），但不允许 false 或缺失。
+// 行首锚定 ^[ \t]* 是为了排除注释行：# VITE_ANDROID_SINGLE_USER: "true"
+// 不算注入——否则删掉注入只留注释也能骗过检查。
+const singleUserPattern = /^[ \t]*VITE_ANDROID_SINGLE_USER:[ \t]*"?true"?[ \t]*$/m;
+if (!singleUserPattern.test(androidJob)) {
+  console.error(
+    "Android release job must inject VITE_ANDROID_SINGLE_USER: \"true\" " +
+    "(the APK would otherwise ship with the account login gate)"
+  );
+  process.exit(1);
+}
+// 三步都必须带上：编译验证、单元测试、正式打包。任何一步缺失都说明有人删掉了注入。
+const androidJobSteps = [
+  "Run Android compile validation",
+  "Run Android unit tests",
+  "Build universal Android APK",
+];
+const stepsMissingSingleUser = androidJobSteps.filter((stepName) => {
+  const step = androidJob.split(`- name: ${stepName}`)[1];
+  if (!step) return true;
+  // 只取当前 step 到下一个 step 之间的内容，避免把后续 step 的 env 误算进来
+  const block = step.split("\n      - name: ")[0];
+  return !singleUserPattern.test(block);
+});
+if (stepsMissingSingleUser.length) {
+  console.error(
+    "These Android release steps must export VITE_ANDROID_SINGLE_USER=\"true\":",
+    stepsMissingSingleUser
+  );
+  process.exit(1);
+}
+// 变量名拼错（例如 VITE_ANDROID_SINGLE_USERS）也应当被发现
+const singleUserTypo = androidJob.match(/VITE_ANDROID_SINGLE_USER\w+:/);
+if (singleUserTypo) {
+  console.error(`Unknown workflow variable (typo?): ${singleUserTypo[0]}`);
+  process.exit(1);
+}
+// 应用锁不能存在"无验证重置"后门：任何能在不输入口令的情况下清除锁配置的
+// 导出函数，都等于把应用锁变成装饰品。忘记口令只允许通过重装应用解决。
+const appLockSource = fs.readFileSync("src/features/app-lock.ts", "utf8");
+const appLockViewSource = fs.readFileSync("src/features/app-lock-view.tsx", "utf8");
+if (/export\s+(async\s+)?function\s+forgetLock/.test(appLockSource) ||
+    appLockViewSource.includes("forgetLock")) {
+  console.error(
+    "App lock must not expose an unauthenticated reset path " +
+    "(forgetLock without biometric/recovery verification defeats the lock)"
+  );
+  process.exit(1);
+}
+if (appLockViewSource.includes("忘记口令")) {
+  console.error("App lock settings must not render a password-free 忘记口令 escape hatch");
+  process.exit(1);
+}
 console.log(`Release metadata OK: v${packageJson.version}, Android versionCode ${androidCode}`);

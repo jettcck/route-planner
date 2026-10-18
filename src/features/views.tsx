@@ -906,13 +906,19 @@ export function ShareCard({
         </button>
         <button
           className="ghost-action"
-          onClick={() => {
-            downloadText(
-              `${trip.destination || "旅行"}-行程.md`,
-              markdown(),
-              "text/markdown;charset=utf-8",
-            );
-            setState("已下载 Markdown");
+          onClick={async () => {
+            // downloadText 是异步的（安卓优先走原生分享）；不 await 会在真正
+            // 落盘前就显示"已下载"，失败时用户也看不到原因。
+            try {
+              await downloadText(
+                `${trip.destination || "旅行"}-行程.md`,
+                markdown(),
+                "text/markdown;charset=utf-8",
+              );
+              setState("已下载 Markdown");
+            } catch (reason) {
+              setState(`下载失败：${reason instanceof Error ? reason.message : String(reason)}`);
+            }
           }}
         >
           下载 Markdown

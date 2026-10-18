@@ -1,7 +1,7 @@
 {
   "name": "route-planner",
   "private": true,
-  "version": "0.3.9",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "node server/dev-all.mjs",
@@ -16,6 +16,7 @@
     "auth:routing-test": "node server/request-routing-test.mjs",
     "auth:ai-test": "node server/ai-proxy-test.mjs",
     "auth:password-reset-test": "node server/password-reset-test.mjs",
+    "auth:single-user-test": "node server/single-user-policy-test.mjs",
     "travel-agent:test": "node server/travel-agent-test.mjs",
     "trip:generation-test": "node server/trip-generation-test.mjs",
     "dev:supervisor-test": "node server/dev-supervisor-test.mjs",
@@ -38,11 +39,12 @@
     "release:environment-test": "node server/release-env-test.mjs",
     "deploy:config-test": "node server/deploy-config-test.mjs",
     "deploy:render-test": "node server/deploy-render-test.mjs",
-    "verify": "npm run auth:config-check && npm run auth:config-test && npm run auth:transport-test && npm run auth:smoke && npm run auth:client-test && npm run auth:routing-test && npm run auth:data-test && npm run auth:ai-test && npm run auth:password-reset-test && npm run travel-agent:test && npm run trip:generation-test && npm run weather:registration-test && npm run weather:resilience-test && npm run data:sanitizer-test && npm run storage:key-test && npm run storage:migration-test && npm run ledger:test && npm run budget:test && npm run reminders:test && npm run dev:supervisor-test && npm run release:assets-test && npm run release:check && npm run deploy:render-test && npm run build",
+    "verify": "npm run auth:config-check && npm run auth:config-test && npm run auth:transport-test && npm run auth:smoke && npm run auth:client-test && npm run auth:routing-test && npm run auth:data-test && npm run auth:ai-test && npm run auth:password-reset-test && npm run auth:single-user-test && npm run travel-agent:test && npm run trip:generation-test && npm run weather:registration-test && npm run weather:resilience-test && npm run data:sanitizer-test && npm run storage:key-test && npm run storage:migration-test && npm run backup:test && npm run ledger:test && npm run budget:test && npm run reminders:test && npm run dev:supervisor-test && npm run release:assets-test && npm run release:check && npm run deploy:render-test && npm run build",
     "build": "node server/clean-dist.mjs && tsc && vite build && node server/frontend-bundle-check.mjs",
     "preview": "vite preview",
     "tauri": "tauri",
-    "storage:migration-test": "node server/storage-migration-test.mjs"
+    "storage:migration-test": "node server/storage-migration-test.mjs",
+    "backup:test": "node server/backup-test.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -62,5 +64,3 @@
     "vite": "^8.0.16"
   }
 }
-
-
