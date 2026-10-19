@@ -350,7 +350,7 @@ export function LedgerView({
           <Users size={18} />
           <span>
             <b>{money(summary.perPerson)}</b>
-            <small>人均（{summary.balances.length} 人）</small>
+            <small>人均（{summary.activeMembers} 人参与分摊）</small>
           </span>
         </div>
         <div className={`stat-card ${summary.remaining < 0 ? "danger" : ""}`}>

@@ -103,6 +103,13 @@ export type LedgerSummary = {
   total: number;
   count: number;
   perPerson: number;
+  /**
+   * 真正参与账目的人数（有垫付或有分摊）。
+   * 规划人数（`defaultMembers` 生成「同伴2」这类占位名）与手工填写的参与人
+   * 会合并进同一个 roster，两者名字不同时 roster 会虚高——直接拿
+   * `balances.length` 当"人均人数"会出现"人均（11 人）"而实际只有 6 人同行。
+   */
+  activeMembers: number;
   remaining: number;
   usedPercent: number;
   byCategory: { category: ExpenseCategory; amount: number; percent: number }[];
@@ -221,10 +228,17 @@ export function summarize(
     .map(([date, amount]) => ({ date, amount: round(amount) }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
+  // 只把真正有钱动过的人算进人均分母：既没垫付也没分摊的成员
+  // （典型来源是规划人数生成的「同伴N」占位名）与本次账目无关，
+  // 计入分母会把"人均"算小，看起来像账目出错了。
+  const activeMemberCount = balances.filter((item) => item.paid !== 0 || item.owed !== 0).length;
+  const perPersonDivisor = Math.max(1, activeMemberCount || travelersSafe);
+
   return {
     total: round(total),
     count: expenses.length,
-    perPerson: round(total / travelersSafe),
+    perPerson: round(total / perPersonDivisor),
+    activeMembers: perPersonDivisor,
     remaining: round(budget - total),
     usedPercent: budget > 0 ? Math.round((total / budget) * 100) : 0,
     byCategory,

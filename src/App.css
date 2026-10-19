@@ -1176,6 +1176,24 @@ button:disabled {
   gap: 7px;
   margin-top: 2px;
 }
+/* 「关于」区：版本号与数据存放说明。刻意比 settings-help 更淡，
+   它只提供事实，不需要吸引点击。 */
+.settings-about {
+  display: grid;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 11px 12px;
+  border: 1px dashed #dfe8e1;
+  border-radius: 6px;
+  color: #77897d;
+  background: #fbfdfb;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.settings-about strong {
+  color: #3d5a4a;
+  font-size: 12px;
+}
 .settings-help button {
   padding: 6px 8px;
   font-size: 11px;

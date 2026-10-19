@@ -3,6 +3,11 @@ import type { Weather } from "../weather";
 import { checkInStats, type CheckInMap } from "./checkin";
 import { summarize, type Expense, estimatedTotal } from "./ledger";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+// 系统交互豁免的实现在独立模块里（无运行时依赖，可在 Node 里跑时序测试），
+// 这里 re-export，调用方仍从 share 取，不必关心拆分。
+import { beginSystemInteraction } from "./system-interaction";
+
+export { consumeSystemInteraction } from "./system-interaction";
 
 function dateLabel(value: string) {
   const date = new Date(`${value}T12:00:00`);
@@ -104,6 +109,8 @@ export async function copyText(text: string) {
 }
 
 export async function downloadText(filename: string, text: string, type: string) {
+  // 从这里开始到系统面板关闭，页面可能被推到后台；先登记，避免期间被应用锁打断。
+  beginSystemInteraction();
   if (isTauri() && /Android/i.test(navigator.userAgent)) {
     try {
       // The Rust command argument is `file_type`, which Tauri exposes to JS

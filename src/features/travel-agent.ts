@@ -76,6 +76,39 @@ export function validateAgentActionForTrip(trip: Trip, action: AgentAction, comp
   return "";
 }
 
+/** 调用方传进来的行程上下文，只取提案校验需要的字段。 */
+export type AgentProposalContext = {
+  trip: Trip;
+  budget: number;
+  completed: { day: number; index: number }[];
+  reminders: string[];
+};
+
+/**
+ * 解析并**按当前行程**校验 AI 提案。
+ *
+ * `parseAgentProposal` 只校验结构与字段范围（day ≤ 30、index ≤ 99），
+ * 但模型完全可能给一个只有 2 天的行程排出 day=5 的改动——那种动作一旦被
+ * 确认执行，就会去访问并不存在的 `trip.days[5]`，轻则静默失效，重则抛错。
+ * 所以这里逐条过 `validateAgentActionForTrip`，丢弃不可执行的动作；
+ * 一条都不剩时整份提案作废，由调用方提示重试，而不是给用户一个空提案。
+ */
+export function validateAgentProposal(value: unknown, context: AgentProposalContext): AgentProposal | undefined {
+  const parsed = parseAgentProposal(value);
+  if (!parsed) return undefined;
+  const actions = parsed.actions.filter((action) =>
+    validateAgentActionForTrip(
+      context.trip,
+      action,
+      context.completed,
+      context.budget,
+      context.reminders,
+    ) === "",
+  );
+  if (!actions.length) return undefined;
+  return { ...parsed, actions };
+}
+
 export function sanitizeAgentReminders(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const result: string[] = [];

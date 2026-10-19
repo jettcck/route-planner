@@ -39,9 +39,14 @@ export function requiresAccount(): boolean {
   return !SINGLE_USER;
 }
 
-/** 账号入口是否可见（单人模式下只作为「设置」内的可选入口） */
+/**
+ * 账号入口是否可见。
+ * 单人私人版不搭载账号服务（发布链路也已移除端点），设置里再留一个
+ * 「打开账号页」只会把用户带到一个"未配置"的空页——承诺了不存在的能力。
+ * 因此单人版直接隐藏该入口；多用户版保持可见。
+ */
 export function accountEntryVisible(): boolean {
-  return true;
+  return !SINGLE_USER;
 }
 
 /**

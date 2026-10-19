@@ -65,7 +65,7 @@ import {
   tripNamespace,
   useStoredState,
 } from "./features/store";
-import { downloadText } from "./features/share";
+import { consumeSystemInteraction, downloadText } from "./features/share";
 import {
   ALL_SECTIONS,
   BACKUP_FORMAT_ID,
@@ -80,11 +80,11 @@ import "./features/backup.css";
 import { AccountView } from "./features/auth-view";
 import { authApi, useAuth } from "./features/auth";
 import { useUiFeedback } from "./features/ui-feedback";
-import { DEFAULT_VIEW, MULTI_PROVIDER_ENABLED, SINGLE_USER, requiresAccount } from "./features/app-mode";
+import { DEFAULT_VIEW, MULTI_PROVIDER_ENABLED, SINGLE_USER, accountEntryVisible, requiresAccount } from "./features/app-mode";
 import { isAndroidSecureStore, readSecureEntry, writeSecure, deleteSecure } from "./features/secure-store";
 import { createWeatherRegistration, type WeatherMonitorStatus } from "./features/weather-registration";
 import { parseTripContent } from "./features/trip-generation";
-import { buildTravelAgentSuggestions, parseAgentProposal, sanitizeAgentReminders, validateAgentActionForTrip, type AgentProposal, type TravelAgentSuggestion } from "./features/travel-agent";
+import { buildTravelAgentSuggestions, sanitizeAgentReminders, validateAgentActionForTrip, validateAgentProposal, type AgentProposal, type TravelAgentSuggestion } from "./features/travel-agent";
 import { TravelAgentPanel } from "./features/travel-agent-view";
 // Keep the native diagnostics surface out of production bundles entirely.
 // Local development and the explicit Android acceptance build opt in at build
@@ -832,6 +832,8 @@ function PlannerApp() {
     return () => { alive = false; };
   }, []);
   // 回到前台：后台超过 60 秒就重新上锁，短暂切走（回消息/看时间）不打断。
+  // 例外：系统分享/文件选择这类用户主动发起的交互（见 share.ts），
+  // 不能因为用户在系统面板里挑应用挑得久就把人锁在门外。
   useEffect(() => {
     if (!lockEnabled) return;
     const onVisibility = () => {
@@ -839,7 +841,11 @@ function PlannerApp() {
         hiddenAt.current = Date.now();
         return;
       }
-      if (hiddenAt.current && Date.now() - hiddenAt.current > 60_000) setLocked(true);
+      const away = hiddenAt.current ? Date.now() - hiddenAt.current : 0;
+      // 令牌必须每次回到前台都消费：若只在"超过 60 秒"时才取，
+      // 一次 30 秒的分享会把它留到下一次真正的离开，等于豁免错了对象。
+      const exemptOnce = consumeSystemInteraction();
+      if (away > 60_000 && !exemptOnce) setLocked(true);
       hiddenAt.current = 0;
     };
     document.addEventListener("visibilitychange", onVisibility);
@@ -1200,18 +1206,49 @@ function PlannerApp() {
     };
   }
   async function askAgentAi() {
-    if (!auth.token) { setAgentError("请先登录账号后使用 AI 深度分析"); return; }
+    const context = agentContext();
     setAgentBusy(true); setAgentError(""); setAgentProposal(null);
-    const result = await authApi.agentPlan(auth.token, agentContext());
-    if (!result.ok) setAgentError(result.message);
-    else {
-      try {
-        const parsed = parseAgentProposal(JSON.parse(result.data.content));
-        if (!parsed) throw new Error("AI 提案格式无效");
-        setAgentProposal(parsed); setAgentNotice("AI 已生成提案，请逐项确认后执行。");
-      } catch { setAgentError("AI 返回的提案无法通过安全校验，请重试"); }
+    try {
+      let content: string;
+      if (isTauri()) {
+        if (!apiKey.trim()) {
+          setSettingsOpen(true);
+          setAgentError("请先在 AI 设置中填写 API Key");
+          return;
+        }
+        content = await invoke<string>("generate_agent", {
+          apiKey: apiKey.trim(),
+          endpoint: endpoint.trim(),
+          model: model.trim(),
+          request: context,
+        });
+      } else {
+        if (!auth.token) {
+          setAgentError("请先登录账号后使用 AI 深度分析");
+          return;
+        }
+        const result = await authApi.agentPlan(auth.token, context);
+        if (!result.ok) {
+          setAgentError(result.message);
+          return;
+        }
+        content = result.data.content;
+      }
+      const proposal = validateAgentProposal(JSON.parse(content), context);
+      if (!proposal) {
+        // 全部动作都不适用于当前行程（越界、已打卡、时间冲突、超预算）。
+        // 静默置空会让用户以为"点了没反应"，必须给一句能看懂的话。
+        setAgentError("AI 给的调整都不适用于当前行程，请稍后重试或换个问法。");
+        return;
+      }
+      setAgentProposal(proposal);
+      setAgentNotice("AI 已生成提案，请逐项确认后执行。");
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : "AI 暂时不可用";
+      setAgentError(message === "" ? "AI 返回的提案无法通过安全校验，请重试" : message);
+    } finally {
+      setAgentBusy(false);
     }
-    setAgentBusy(false);
   }
   function applyAgentAction(index: number) {
     if (!agentProposal) return;
@@ -1345,6 +1382,9 @@ function PlannerApp() {
     setTutorialStep(0);
   }
   const provider = providers.find((item) => item.id === providerId) ?? primaryProvider;
+  // 单人版只有主服务商，keyUrl 的兜底也必须指向它——写死 OpenAI 会让用户
+  // 在只有 DeepSeek 的构建里被送到一个用不上的页面。
+  const providerKeyPage = provider.keyUrl ?? primaryProvider.keyUrl ?? "";
   const apiKey = apiKeys[providerId] ?? "";
   function beginUpdateOperation() {
     if (updateOperationLock.current) return false;
@@ -2884,17 +2924,35 @@ function PlannerApp() {
             </div>
             {tutorialStep === 0 && (
               <div className="tutorial-content">
-                <p>AI 生成攻略需要你选择一家服务商并准备对应的 API Key。支持 OpenAI、DeepSeek、智谱 AI、通义千问、Moonshot/Kimi 和 SiliconFlow。</p>
-                <button className="tutorial-link" onClick={() => openExternal(provider.keyUrl ?? "https://platform.openai.com/api-keys")}>
-                  打开 {provider.name} 的 API Key 页面 <ExternalLink size={15} />
-                </button>
-                <p className="tutorial-note">API 使用可能需要单独开通付费或充值；ChatGPT 订阅通常不包含 API 额度。请勿把密钥发给其他人。</p>
+                <p>
+                  {MULTI_PROVIDER_ENABLED
+                    ? "AI 生成攻略需要你选择一家服务商并准备对应的 API Key。支持 OpenAI、DeepSeek、智谱 AI、通义千问、Moonshot/Kimi 和 SiliconFlow。"
+                    : `AI 生成攻略需要一份 ${provider.name} 的 API Key。只有「一键生成攻略」会用到它——行程、记账、清单、打卡、提醒都不依赖网络。`}
+                </p>
+                {providerKeyPage ? (
+                  <button className="tutorial-link" onClick={() => openExternal(providerKeyPage)}>
+                    打开 {provider.name} 的 API Key 页面 <ExternalLink size={15} />
+                  </button>
+                ) : null}
+                <p className="tutorial-note">
+                  {MULTI_PROVIDER_ENABLED
+                    ? "API 使用可能需要单独开通付费或充值；ChatGPT 订阅通常不包含 API 额度。请勿把密钥发给其他人。"
+                    : "API 按用量计费，需要单独充值；聊天会员不等同于 API 额度。密钥只保存在本机安全存储里，不会上传到任何服务器。"}
+                </p>
               </div>
             )}
             {tutorialStep === 1 && (
               <div className="tutorial-content">
-                <p>点击应用中的“AI 设置”，把刚复制的密钥粘贴到“API Key”输入框，然后点击“完成”。</p>
-                <p>在“AI 设置”中选择服务商，模型和接口地址会自动填好。使用自定义服务时，再按服务方说明填写这两项。</p>
+                <p>
+                  {MULTI_PROVIDER_ENABLED
+                    ? "点击应用中的“AI 设置”，把刚复制的密钥粘贴到“API Key”输入框，然后点击“完成”。"
+                    : "点击应用中的“AI 设置”，把刚复制的密钥粘贴到“API Key”输入框，然后点击“保存并完成”。"}
+                </p>
+                <p>
+                  {MULTI_PROVIDER_ENABLED
+                    ? "在“AI 设置”中选择服务商，模型和接口地址会自动填好。使用自定义服务时，再按服务方说明填写这两项。"
+                    : `模型（${provider.model}）与接口地址已经填好，不用修改；需要换模型时在 AI 设置里改“模型”一项即可。`}
+                </p>
                 <p className="tutorial-note">
                   {aiKeysPersisted
                     ? "密钥会保存在 Android 安全存储中，关闭应用后仍可使用；你可以在 AI 设置中随时清除。"
@@ -3013,27 +3071,29 @@ function PlannerApp() {
                 播放测试音
               </button>
             </section>
-            <section className="ui-preferences" aria-label="账号与同步">
-              <div className="ui-preferences__head">
-                <div>
-                  <strong>账号（可选）</strong>
-                  <small>
-                    途迹的本机功能不依赖账号；只有需要多设备同步或服务端 AI 时才登录。
-                  </small>
+            {accountEntryVisible() ? (
+              <section className="ui-preferences" aria-label="账号与同步">
+                <div className="ui-preferences__head">
+                  <div>
+                    <strong>账号（可选）</strong>
+                    <small>
+                      途迹的本机功能不依赖账号；只有需要多设备同步或服务端 AI 时才登录。
+                    </small>
+                  </div>
                 </div>
-              </div>
-              <button
-                className="ui-test-sound"
-                type="button"
-                onClick={() => {
-                  flushAiKeysWrite();
-                  setSettingsOpen(false);
-                  setView("account");
-                }}
-              >
-                {auth.user ? `已登录：${auth.user.nickname || auth.user.email || auth.user.phone || "账号"}` : "打开账号页"}
-              </button>
-            </section>
+                <button
+                  className="ui-test-sound"
+                  type="button"
+                  onClick={() => {
+                    flushAiKeysWrite();
+                    setSettingsOpen(false);
+                    setView("account");
+                  }}
+                >
+                  {auth.user ? `已登录：${auth.user.nickname || auth.user.email || auth.user.phone || "账号"}` : "打开账号页"}
+                </button>
+              </section>
+            ) : null}
             <section className="ui-preferences" aria-label="应用锁">
               <div className="ui-preferences__head">
                 <div>
@@ -3064,11 +3124,17 @@ function PlannerApp() {
             </section>
             {nativeAiSettings ? <div className="settings-help">
               <strong>第一次使用？</strong>
-              <span>选择服务商后，打开对应页面创建 API Key，复制后粘贴到下方。各服务的计费和额度独立。</span>
+              <span>
+                {MULTI_PROVIDER_ENABLED
+                  ? "选择服务商后，打开对应页面创建 API Key，复制后粘贴到下方。各服务的计费和额度独立。"
+                  : `打开 ${provider.name} 控制台创建 API Key，复制后粘贴到下方。按用量计费，需单独充值；勾选「记住」之外本机不会把它发到别处。`}
+              </span>
               <div>
-                <button onClick={() => openExternal(provider.keyUrl ?? "https://platform.openai.com/api-keys")}>
-                  获取 API Key <ExternalLink size={14} />
-                </button>
+                {providerKeyPage ? (
+                  <button onClick={() => openExternal(providerKeyPage)}>
+                    获取 API Key <ExternalLink size={14} />
+                  </button>
+                ) : null}
                 <button onClick={showTutorial}>查看完整教程</button>
               </div>
             </div> : null}
@@ -3153,6 +3219,15 @@ function PlannerApp() {
                 保存并完成
               </button>
             </div> : null}
+            <div className="settings-about">
+              <strong>途迹 v{APP_VERSION}</strong>
+              <span>
+                行程、账单、打包、打卡与提醒全部保存在本机，不会上传服务器。除「一键生成攻略」与天气刷新外，其余功能全程可离线使用。
+              </span>
+              <span>
+                卸载应用或系统清除数据会删除本机内容；换手机前请先在「数据备份与恢复」里导出一份 .routebackup。
+              </span>
+            </div>
           </section>
         </div>
       )}
