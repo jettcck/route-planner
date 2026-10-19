@@ -401,9 +401,6 @@ const requiredWorkflowMarkers = [
   "missing embedded frontend bundle",
   "sha256sum \"$apk\"",
   "Remove Android signing material",
-  "release:frontend-config-check",
-  "VITE_AUTH_ENDPOINT: ${{ vars.VITE_AUTH_ENDPOINT }}",
-  "Validate production frontend endpoint",
   "releaseDraft: true",
   "Validate and publish complete release",
   "validateReleaseAssets",
@@ -416,15 +413,24 @@ if (missingWorkflowMarkers.length) {
 }
 const windowsJob = workflow.match(/\n  windows:\n([\s\S]*?)(?=\n  android:\n|$)/)?.[1] || "";
 const androidJob = workflow.match(/\n  android:\n([\s\S]*)$/)?.[1] || "";
-if (!windowsJob.includes("Validate production frontend endpoint") ||
-    !windowsJob.includes("VITE_AUTH_ENDPOINT: ${{ vars.VITE_AUTH_ENDPOINT }}") ||
-    !windowsJob.includes('VITE_ENABLE_ANDROID_DIAGNOSTICS: "false"') ||
-    !windowsJob.includes("npm run release:frontend-config-check") ||
-    !androidJob.includes("Validate production frontend endpoint") ||
-    !androidJob.includes("VITE_AUTH_ENDPOINT: ${{ vars.VITE_AUTH_ENDPOINT }}") ||
-    !androidJob.includes('VITE_ENABLE_ANDROID_DIAGNOSTICS: "false"') ||
-    !androidJob.includes("npm run release:frontend-config-check")) {
-  console.error("Windows and Android release jobs must validate and inject VITE_AUTH_ENDPOINT");
+if (!windowsJob.includes('VITE_ENABLE_ANDROID_DIAGNOSTICS: "false"') ||
+    !androidJob.includes('VITE_ENABLE_ANDROID_DIAGNOSTICS: "false"')) {
+  console.error("Windows and Android release jobs must disable the Android diagnostics surface");
+  process.exit(1);
+}
+// 账号服务已从发布链路彻底移除（单人私人版不搭载任何账号服务）。
+// 反向断言：workflow 里不得再出现端点注入或端点校验步骤，否则会重新引入
+// "没配 VITE_AUTH_ENDPOINT 就无法发版"的强制依赖。
+const authEndpointLeftovers = [
+  ["VITE_AUTH_ENDPOINT", "账号服务地址注入"],
+  ["release:frontend-config-check", "前端端点校验步骤"],
+  ["Validate production frontend endpoint", "端点校验步骤名"],
+].filter(([needle]) => workflow.includes(needle));
+if (authEndpointLeftovers.length) {
+  console.error(
+    "Account service must stay out of the release workflow; remove:",
+    authEndpointLeftovers.map(([, label]) => label),
+  );
   process.exit(1);
 }
 if (!authServerSource.includes("AUTH_ORIGINS.has(\"*\")") ||

@@ -43,7 +43,6 @@ jobs:
       - run: npm ci
       - name: Check production release configuration before builds
         env:
-          VITE_AUTH_ENDPOINT: ${{ vars.VITE_AUTH_ENDPOINT }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -98,10 +97,6 @@ jobs:
         with:
           workspaces: src-tauri
       - run: npm ci
-      - name: Validate production frontend endpoint
-        env:
-          VITE_AUTH_ENDPOINT: ${{ vars.VITE_AUTH_ENDPOINT }}
-        run: npm run release:frontend-config-check
       - name: Configure updater repository
         shell: pwsh
         env:
@@ -150,7 +145,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          VITE_AUTH_ENDPOINT: ${{ vars.VITE_AUTH_ENDPOINT }}
           VITE_ENABLE_ANDROID_DIAGNOSTICS: "false"
         with:
           tagName: v__VERSION__
@@ -235,11 +229,6 @@ jobs:
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
       - run: npm ci
-      - name: Validate production frontend endpoint
-        env:
-          VITE_AUTH_ENDPOINT: ${{ vars.VITE_AUTH_ENDPOINT }}
-          VITE_ANDROID_SINGLE_USER: "true"
-        run: npm run release:frontend-config-check
       - name: Run Android compile validation
         env:
           # 本机单人私人版：Vite 在编译期静态替换该变量，运行期无法篡改。
@@ -279,7 +268,6 @@ jobs:
         env:
           CI: true
           ROUTE_ANDROID_UPDATE_REPOSITORY: ${{ github.repository }}
-          VITE_AUTH_ENDPOINT: ${{ vars.VITE_AUTH_ENDPOINT }}
           VITE_ENABLE_ANDROID_DIAGNOSTICS: "false"
           # 单人私人版开关必须在打包这一步注入：前端由 cargo 编译期嵌入 .so，
           # 变量缺失会导致 APK 落地后仍弹出登录页。

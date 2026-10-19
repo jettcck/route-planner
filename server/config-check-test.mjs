@@ -43,7 +43,9 @@ run("AI endpoint credentials are rejected", "https://app.example.com", 1, {
 run("AI endpoint query parameters are rejected", "https://app.example.com", 1, {
   AI_ENDPOINT: "https://api.example.com/chat/completions?tenant=demo",
 });
-runFrontend("Production frontend endpoint is required", "", 1);
+// 账号服务已从发布链路移除：端点留空是合法配置，正式包按纯本机构建。
+// 这条用例同时是回归守卫——若有人把"必须配置端点"加回来，这里会立刻失败。
+runFrontend("No account endpoint means a local-only build", "", 0);
 runFrontend("Production frontend endpoint must use HTTPS", "http://account.example.com", 1);
 runFrontend("Production frontend endpoint rejects credentials", "https://user:password@account.example.com", 1);
 runFrontend("Production frontend endpoint rejects query parameters", "https://account.example.com/api?tenant=demo", 1);

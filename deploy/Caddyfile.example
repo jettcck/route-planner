@@ -1,5 +1,0 @@
-# Replace the hostname before starting Caddy.
-account.example.com {
-    reverse_proxy auth:8787
-    encode zstd gzip
-}

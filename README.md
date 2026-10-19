@@ -43,7 +43,7 @@ Windows 未启用开发者模式时，Tauri CLI 的默认 Android release 流程
 
 ## AI 设置
 
-Android 正式包不会预填本地开发账号服务地址。发布前请通过 `VITE_AUTH_ENDPOINT` 配置 HTTPS 账号服务地址，例如 `VITE_AUTH_ENDPOINT=https://account.example.com`；Debug 模拟器可填写 `http://10.0.2.2:8787`，Debug 真机可填写电脑局域网 IP（例如 `http://192.168.1.20:8787`）。`npm run android:release:local` 生成的本地验收包会自动预填模拟器地址 `http://10.0.2.2:8787`，并且只在诊断构建标记下临时允许该 HTTP 地址；Release 包强制 HTTPS。Android 上的账号会话和 AI Key 使用 Android Keystore 加密保存，导出的 JSON/CSV 通过系统分享面板交给用户保存。
+Android 正式包默认**不搭载任何账号服务**。单个或少数几台设备自用时，`VITE_AUTH_ENDPOINT` 留空即可，账号页会显示"未配置服务"，行程、记账、打包、打卡、提醒全部照常可用。只有在确实部署了账号服务（例如将来要做多设备同步）时，才需要填入 HTTPS 地址，例如 `VITE_AUTH_ENDPOINT=https://account.example.com`；Debug 模拟器可填写 `http://10.0.2.2:8787`，Debug 真机可填写电脑局域网 IP（例如 `http://192.168.1.20:8787`）。`npm run android:release:local` 生成的本地验收包会自动预填模拟器地址 `http://10.0.2.2:8787`，并且只在诊断构建标记下临时允许该 HTTP 地址；一旦填写了该变量，Release 构建就强制 HTTPS。Android 上的账号会话和 AI Key 使用 Android Keystore 加密保存，导出的 JSON/CSV 通过系统分享面板交给用户保存。
 
 Android 自更新会检查构建时注入的 GitHub 仓库。GitHub Actions 自动使用当前仓库；本地构建其他 fork 时设置 `ROUTE_ANDROID_UPDATE_REPOSITORY=owner/repository`，避免更新器误查原项目 Release。Windows 发布 job 也会在构建前把桌面更新端点切换到当前仓库。
 
@@ -56,7 +56,7 @@ AI 生成的营业时间、费用、预约和交通细节可能不准确。天�
 将项目推送到自己的 GitHub 仓库后，在 **Actions → Publish desktop and Android release → Run workflow** 点击运行。工作流会构建 Windows NSIS 安装包和 Android APK，并把两者上传到同一个 **Release**。Android 更新器会优先选择 universal APK，并按设备 ABI 回退到 arm64-v8a 或 armeabi-v7a 包。
 发布工作流默认只读，只有 Windows 和 Android 发布 job 申请 Release 写权限；同一 ref 会串行发布，构建超时会自动终止。Android job 结束时会清理上传 keystore、签名配置和临时 APK。 发布前置 validation job 会启动本地账号服务并运行网页、服务端、Rust 验收；Windows 和 Android 构建通过后才会上传 Release。
 
-正式发布前，在 GitHub 仓库打开 **Settings → Secrets and variables → Actions → Variables**，新增 `VITE_AUTH_ENDPOINT`，值填写账号服务的 HTTPS 根地址，例如 `https://account.example.com`。Windows 和 Android job 会在构建前拒绝缺失、非 HTTPS、带凭据、查询参数或片段的地址，避免安装后的正式包无法登录。这个变量只保存服务地址；AI Key、数据库密码、Android keystore 和 updater 私钥仍必须放在 **Secrets** 中。
+正式发布需要准备的 GitHub 配置只剩签名相关：**Settings → Secrets and variables → Actions → Secrets** 里的 `TAURI_SIGNING_PRIVATE_KEY`、`ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`。`VITE_AUTH_ENDPOINT` 已从发布必填项中移除——不配也能正常发版，配了才校验它必须是干净的 HTTPS 地址（非 HTTPS、带凭据、查询参数或片段会被拒绝）。AI Key 只放在后端或本机，不放进仓库。
 
 首次安装任意正式版本后，桌面端和 Android 端都会在启动时检查 GitHub Releases。Windows 发现新版本时会下载签名包并自动重启；Android 会下载匹配包名、版本号和已安装签名的 APK，然后打开系统安装器，用户确认后完成更新。Android 无法静默替换自身；首次从历史 debug APK 切换到正式签名 APK 时，需要先卸载旧 debug 版本。
 
