@@ -220,6 +220,13 @@ if (!nativeBridge.includes('fn exceeds_chars(value: &str, maximum: usize)') ||
   console.error("Native AI request limits must count Unicode characters consistently with the frontend");
   process.exit(1);
 }
+if (!nativeBridge.includes('async fn generate_agent(') ||
+    !nativeBridge.includes('tauri::generate_handler![generate_trip, generate_agent]') ||
+    !appSource.includes('invoke<string>("generate_agent"') ||
+    !appSource.includes('validateAgentProposal(JSON.parse(content), context)')) {
+  console.error("Single-user native builds must support AI itinerary assistant through the Keystore-backed API key");
+  process.exit(1);
+}
 if (!shareBridge.includes('plugin:file-share|share_text", { filename, text, fileType: type }') ||
     !androidTestPage.includes('plugin:file-share|share_text", { filename: "途迹安卓测试.txt"') ||
     !androidTestPage.includes('fileType: "text/plain"')) {

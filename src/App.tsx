@@ -1244,8 +1244,14 @@ function PlannerApp() {
       setAgentProposal(proposal);
       setAgentNotice("AI 已生成提案，请逐项确认后执行。");
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : "AI 暂时不可用";
-      setAgentError(message === "" ? "AI 返回的提案无法通过安全校验，请重试" : message);
+      const rawMessage = reason instanceof Error ? reason.message : "";
+      // Native errors are intentionally generic English strings so they do
+      // not expose provider details. Keep the product surface in Chinese;
+      // validation failures already contain a useful Chinese explanation.
+      const message = /[\u4e00-\u9fff]/.test(rawMessage)
+        ? rawMessage
+        : "AI 管家暂时不可用，请检查网络、API Key 和额度后重试";
+      setAgentError(message);
     } finally {
       setAgentBusy(false);
     }
@@ -2927,7 +2933,7 @@ function PlannerApp() {
                 <p>
                   {MULTI_PROVIDER_ENABLED
                     ? "AI 生成攻略需要你选择一家服务商并准备对应的 API Key。支持 OpenAI、DeepSeek、智谱 AI、通义千问、Moonshot/Kimi 和 SiliconFlow。"
-                    : `AI 生成攻略需要一份 ${provider.name} 的 API Key。只有「一键生成攻略」会用到它——行程、记账、清单、打卡、提醒都不依赖网络。`}
+                    : `AI 生成攻略和 AI 管家深度分析需要一份 ${provider.name} 的 API Key。行程、记账、清单、打卡、提醒不依赖网络。`}
                 </p>
                 {providerKeyPage ? (
                   <button className="tutorial-link" onClick={() => openExternal(providerKeyPage)}>
@@ -3025,8 +3031,8 @@ function PlannerApp() {
             <p className="modal-intro">
               {nativeAiSettings
                 ? aiKeysPersisted
-                  ? "使用兼容 Chat Completions 的服务生成行程。Key 保存在 Android 安全存储中，关闭应用后仍可继续使用。"
-                  : "使用兼容 Chat Completions 的服务生成行程。桌面版只在本次运行期间保留 Key，关闭应用后需要重新输入。"
+                  ? "使用兼容 Chat Completions 的服务生成行程和 AI 管家分析。Key 保存在 Android 安全存储中，关闭应用后仍可继续使用。"
+                  : "使用兼容 Chat Completions 的服务生成行程和 AI 管家分析。桌面版只在本次运行期间保留 Key，关闭应用后需要重新输入。"
                 : "网页端 AI 由账号服务代理，浏览器不会保存或接触 API Key。请在账号页查看服务状态；管理员配置 AI 后即可使用。"}
             </p>
             <section className="ui-preferences" aria-label="交互反馈设置">
@@ -3222,7 +3228,7 @@ function PlannerApp() {
             <div className="settings-about">
               <strong>途迹 v{APP_VERSION}</strong>
               <span>
-                行程、账单、打包、打卡与提醒全部保存在本机，不会上传服务器。除「一键生成攻略」与天气刷新外，其余功能全程可离线使用。
+                行程、账单、打包、打卡与提醒全部保存在本机，不会上传服务器。AI 生成、AI 管家深度分析与天气刷新需要网络，其余功能可离线使用。
               </span>
               <span>
                 卸载应用或系统清除数据会删除本机内容；换手机前请先在「数据备份与恢复」里导出一份 .routebackup。
