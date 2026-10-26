@@ -86,6 +86,7 @@ import { createWeatherRegistration, type WeatherMonitorStatus } from "./features
 import { parseTripContent } from "./features/trip-generation";
 import { buildTravelAgentSuggestions, sanitizeAgentReminders, validateAgentActionForTrip, validateAgentProposal, type AgentProposal, type TravelAgentSuggestion } from "./features/travel-agent";
 import { TravelAgentPanel } from "./features/travel-agent-view";
+import { BookingPanel } from "./features/booking-panel";
 // Keep the native diagnostics surface out of production bundles entirely.
 // Local development and the explicit Android acceptance build opt in at build
 // time; a production APK therefore cannot load this privileged test page even
@@ -370,6 +371,10 @@ const mapApps: Record<MapProvider, MapAppInfo> = {
   tencent: { packageName: "com.tencent.map", label: "腾讯地图", short: "腾讯" },
 };
 const mapProviderOrder: MapProvider[] = ["amap", "baidu", "tencent"];
+
+const RAIL_BOOKING_URL = "https://www.12306.cn/index/";
+const FLIGHT_BOOKING_URL = "https://flights.ctrip.com/online/channel/domestic";
+const HOTEL_BOOKING_URL = "https://hotels.ctrip.com/";
 
 /** 把原生层返回的包名列表转成中文标签，用于界面上的检测状态提示。 */
 function mapAppLabels(packages: string[] | null) {
@@ -801,6 +806,9 @@ function PlannerApp() {
   const reminderCommandQueue = useRef<Promise<void>>(Promise.resolve());
   const weatherCommandQueue = useRef<Promise<void>>(Promise.resolve());
   const nativeAiSettings = isTauri();
+  // 单人版没有账号门槛；多用户构建仍要等登录后才注册定位、提醒和后台天气。
+  // 这条条件必须与 requiresAccount() 共用，避免私人 Android 包出现“能规划但不提醒”的半可用状态。
+  const localFeaturesReady = auth.ready && (!requiresAccount() || Boolean(auth.user));
   // Android uses the Keystore-backed bridge. Desktop Tauri currently keeps
   // provider keys in memory only; do not claim persistence in that build.
   const aiKeysPersisted = isAndroidSecureStore();
@@ -927,7 +935,7 @@ function PlannerApp() {
   }, []);
   useEffect(() => {
     if (!navigator.geolocation) return;
-    if (!auth.ready || !auth.user) {
+    if (!localFeaturesReady) {
       setLocationCoords(undefined);
       return;
     }
@@ -959,7 +967,7 @@ function PlannerApp() {
     return () => {
       cancelled = true;
     };
-  }, [auth.ready, auth.user]);
+  }, [localFeaturesReady]);
 
   // 天气应用常见的前台刷新策略：回到页面立即更新，前台每 10 分钟更新一次。
   // 定时器只在 WebView 可见时工作，避免安卓后台耗电和无意义请求。
@@ -981,8 +989,8 @@ function PlannerApp() {
     // Native reminders contain the destination and can appear on the lock
     // screen. Do not keep them alive after logout; the effect below will
     // schedule them again once the secure session is restored after login.
-    if (!auth.ready || !auth.user) {
-      if (auth.ready) {
+    if (!localFeaturesReady) {
+      if (auth.ready && requiresAccount()) {
         void enqueueNativeCommand(reminderCommandQueue, () =>
           invoke("plugin:notifications|cancel_all_notifications"),
         ).catch(() => {});
@@ -1052,13 +1060,13 @@ function PlannerApp() {
         await invoke("plugin:notifications|cancel_notification", { title: legacyTitle, atMillis }).catch(() => {});
       }).catch(() => {});
     };
-  }, [auth.ready, auth.user, trip.destination, trip.days[0]?.date]);
+  }, [localFeaturesReady, auth.ready, trip.destination, trip.days[0]?.date]);
 
   useEffect(() => {
     if (!isTauri() || !/Android/i.test(navigator.userAgent)) return;
     let cancelled = false;
-    if (!auth.ready || !auth.user) {
-      if (auth.ready) {
+    if (!localFeaturesReady) {
+      if (auth.ready && requiresAccount()) {
         void enqueueNativeCommand(weatherCommandQueue, () =>
           invoke("plugin:weather-background|cancel_weather_monitor"),
         ).catch(() => {});
@@ -1109,7 +1117,7 @@ function PlannerApp() {
         invoke("plugin:weather-background|cancel_weather_monitor"),
       ).catch(() => {});
     };
-  }, [auth.ready, auth.user, trip.destination, dates]);
+  }, [localFeaturesReady, auth.ready, trip.destination, dates]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1157,6 +1165,24 @@ function PlannerApp() {
     value: PlannerInput[K],
   ) {
     setInput((previous) => ({ ...previous, [key]: value }));
+  }
+  function applyWinterBreakPreset() {
+    const now = new Date();
+    // 以每年 1 月 20 日作为可编辑的寒假起点，避免替用户猜学校的确切放假日。
+    const candidate = new Date(now.getFullYear(), 0, 20);
+    if (candidate.getTime() <= now.getTime()) candidate.setFullYear(candidate.getFullYear() + 1);
+    const startDate = `${candidate.getFullYear()}-01-20`;
+    setInput((previous) => ({
+      ...previous,
+      startDate,
+      days: 5,
+      travelers: Math.max(2, previous.travelers),
+      pace: "适中",
+      interests: previous.interests.length ? previous.interests : ["美食", "人文"],
+      notes: previous.notes.trim() || "和同学结伴出游，优先安排交通方便、适合多人同行的路线，预留购票和住宿预算。",
+    }));
+    setError("");
+    setBudgetNotice("已套用寒假 5 日模板；请把出发日期改成学校实际放假时间，再生成攻略。 ");
   }
   useEffect(() => {
     if (requiresAccount() && !auth.user && view !== "account") {
@@ -1306,6 +1332,16 @@ function PlannerApp() {
         .then(() => setAgentNotice("已打开 12306 官方入口，请自行核对车次、证件和退改规则。"))
         .catch(() => setAgentNotice("暂时无法打开购票入口，请检查网络。"));
     }
+  }
+  function openBookingEntry(label: string, url: string) {
+    void openExternal(url)
+      .then(() => setAgentNotice(`已打开${label}，请在外部页面核对信息后自行下单。`))
+      .catch(() => setAgentNotice(`暂时无法打开${label}，请检查网络。`));
+  }
+  function openHotelMapSearch() {
+    void openLocationMap("amap", trip.destination, `${trip.destination} 酒店`)
+      .then(() => setAgentNotice("已打开附近住宿搜索，请核对位置、价格、取消政策和订单信息。"))
+      .catch(() => setAgentNotice("暂时无法打开住宿搜索，请安装地图 App 或检查网络。"));
   }
   const checkInDone = trip.days.reduce(
     (sum, day, dayIndex) =>
@@ -2287,6 +2323,11 @@ function PlannerApp() {
             <div className="panel-kicker">NEW JOURNEY</div>
             <h1>规划下一程</h1>
             <p className="panel-subtitle">告诉我你的出行安排</p>
+            <button type="button" className="winter-preset" onClick={applyWinterBreakPreset}>
+              <Sparkles size={14} />
+              寒假和同学玩 5 天
+              <span>快速套用，可再修改日期和预算</span>
+            </button>
             <div className="form-stack">
               <label className="field">
                 <span>目的地</span>
@@ -2539,6 +2580,16 @@ function PlannerApp() {
               proposal={agentProposal}
               busy={agentBusy}
               error={agentError}
+            />
+            <BookingPanel
+              destination={trip.destination}
+              startDate={trip.days[0]?.date || input.startDate}
+              days={trip.days.length}
+              travelers={input.travelers}
+              onOpenRail={() => openBookingEntry("12306 火车票入口", RAIL_BOOKING_URL)}
+              onOpenFlight={() => openBookingEntry("机票搜索入口", FLIGHT_BOOKING_URL)}
+              onOpenHotel={() => openBookingEntry("酒店预订入口", HOTEL_BOOKING_URL)}
+              onOpenHotelMap={openHotelMapSearch}
             />
             <div className="summary-strip">
               <div>

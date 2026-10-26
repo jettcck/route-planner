@@ -12,6 +12,7 @@ const fileSharePlugin = fs.readFileSync("src-tauri/gen/android/app/src/main/java
 const shareCachePolicy = fs.readFileSync("src-tauri/gen/android/app/src/main/java/com/luyou/planner/ShareCachePolicy.kt", "utf8");
 const androidTestPage = fs.readFileSync("src/android-test.tsx", "utf8");
 const appSource = fs.readFileSync("src/App.tsx", "utf8");
+const bookingPanelSource = fs.readFileSync("src/features/booking-panel.tsx", "utf8");
 const authSource = fs.readFileSync("src/features/auth.ts", "utf8");
 const authViewSource = fs.readFileSync("src/features/auth-view.tsx", "utf8");
 const secureStoreSource = fs.readFileSync("src/features/secure-store.ts", "utf8");
@@ -225,6 +226,20 @@ if (!nativeBridge.includes('async fn generate_agent(') ||
     !appSource.includes('invoke<string>("generate_agent"') ||
     !appSource.includes('validateAgentProposal(JSON.parse(content), context)')) {
   console.error("Single-user native builds must support AI itinerary assistant through the Keystore-backed API key");
+  process.exit(1);
+}
+if (!appSource.includes('import { BookingPanel } from "./features/booking-panel"') ||
+    !appSource.includes('RAIL_BOOKING_URL = "https://www.12306.cn/index/"') ||
+    !appSource.includes('FLIGHT_BOOKING_URL = "https://flights.ctrip.com/online/channel/domestic"') ||
+    !appSource.includes('HOTEL_BOOKING_URL = "https://hotels.ctrip.com/"') ||
+    !bookingPanelSource.includes('不会自动下单、付款或保存订单信息')) {
+  console.error("Android itinerary builds must keep direct rail, flight, and hotel booking entries with manual confirmation");
+  process.exit(1);
+}
+if (!appSource.includes('const localFeaturesReady = auth.ready && (!requiresAccount() || Boolean(auth.user))') ||
+    !appSource.includes('if (!localFeaturesReady)') ||
+    !appSource.includes('function applyWinterBreakPreset()')) {
+  console.error("Single-user Android builds must keep local reminders, weather, and winter-break planning available without an account");
   process.exit(1);
 }
 if (!shareBridge.includes('plugin:file-share|share_text", { filename, text, fileType: type }') ||

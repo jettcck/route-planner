@@ -2211,9 +2211,75 @@ button:disabled {
 .travel-agent-proposal-item button, .travel-agent-dismiss { white-space:nowrap; border:1px solid #b8c9ff; background:white; color:#2451b8; border-radius:8px; padding:6px 9px; cursor:pointer; }
 .travel-agent-dismiss { margin-top:8px; color:#666; border-color:#d5d8e0; }
 .agent-reminder-group { border-color: #bcd8c4; background: #f8fcf8; }
+.winter-preset {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: -8px 0 2px;
+  padding: 8px 10px;
+  border: 1px solid #c9e2d0;
+  border-radius: 8px;
+  color: #216746;
+  background: #f0f9f2;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+}
+.winter-preset:hover { border-color: #83b997; background: #e7f5ea; }
+.winter-preset span { margin-left: auto; color: #7a9585; font-size: 10px; font-weight: 500; }
+.booking-panel {
+  margin-top: 14px;
+  padding: 15px;
+  border: 1px solid #d8e0ec;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f8fbff, #f4f8fd);
+  box-shadow: 0 2px 8px rgba(39, 66, 103, 0.05);
+}
+.booking-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.booking-panel-head h3 { margin: 3px 0 4px; color: #263d58; font-size: 15px; }
+.booking-panel-head p { margin: 0; color: #6b7e92; font-size: 11px; }
+.booking-local-badge {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border: 1px solid #cbd9e8;
+  border-radius: 999px;
+  color: #58718d;
+  background: #fff;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.booking-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 13px; }
+.booking-action {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 8px 9px;
+  border: 1px solid #cedbea;
+  border-radius: 9px;
+  color: #385675;
+  background: #fff;
+  text-align: left;
+}
+.booking-action:hover { border-color: #7ea1c4; background: #f7fbff; }
+.booking-action > svg:first-child { flex: 0 0 auto; color: #4675a1; }
+.booking-action > svg:last-child { flex: 0 0 auto; margin-left: auto; color: #9aaabd; }
+.booking-action span { display: flex; flex-direction: column; min-width: 0; gap: 3px; }
+.booking-action strong { overflow: hidden; color: #294b6d; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.booking-action small { overflow: hidden; color: #7d8fa2; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.booking-action--rail > svg:first-child { color: #3b8a63; }
+.booking-action--flight > svg:first-child { color: #6b74b5; }
+.booking-action--hotel > svg:first-child,
+.booking-action--map > svg:first-child { color: #b0783e; }
+.booking-footnote { margin: 10px 0 0; color: #7c8999; font-size: 10.5px; line-height: 1.55; }
 @media (max-width: 520px) {
   .travel-agent-item { flex-direction: column; }
   .travel-agent-item button { width: 100%; justify-content: center; }
+  .booking-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .booking-panel-head { flex-direction: column; }
+  .booking-local-badge { align-self: flex-start; }
 }
 .health-card.alert {
   margin-top: 22px;
