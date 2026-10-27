@@ -119,11 +119,12 @@ jobs:
         with:
           script: |
             const tag = process.env.RELEASE_TAG;
-            const { data: release } = await github.rest.repos.getReleaseByTag({
+            const releases = await github.paginate(github.rest.repos.listReleases, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag
-            }).catch(() => ({ data: null }));
+              per_page: 100
+            });
+            const release = releases.find((item) => item.tag_name === tag) || null;
             if (!release) core.info(`No existing release for ${tag}`);
             if (release) {
               if (!release.draft) {
