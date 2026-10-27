@@ -23,6 +23,7 @@ const tauriBuild = fs.readFileSync("src-tauri/build.rs", "utf8");
 const localAndroidBuild = fs.readFileSync("server/android-release-build.mjs", "utf8");
 const androidGradle = fs.readFileSync("src-tauri/gen/android/app/build.gradle.kts", "utf8");
 const soFix = fs.readFileSync("src-tauri/gen/android/app/so-fix.gradle.kts", "utf8");
+const tauriSettings = fs.readFileSync("src-tauri/gen/android/tauri.settings.gradle", "utf8");
 if (!appSource.includes('const ANDROID_DIAGNOSTICS_ENABLED') ||
     !appSource.includes('lazy(() => import("./android-test"))') ||
     !appSource.includes('ANDROID_DIAGNOSTICS_ENABLED && AndroidTestPage') ||
@@ -38,6 +39,10 @@ if (!appSource.includes('const ANDROID_DIAGNOSTICS_ENABLED') ||
     !localAndroidBuild.includes('ANDROID_TARGETS: targetNames.join(" ")') ||
     !localAndroidBuild.includes('Buffer.from("/assets/index-")') ||
     !soFix.includes('dir("../../target")') ||
+    !tauriSettings.includes("System.getenv('CARGO_HOME')") ||
+    !tauriSettings.includes("crateDir('tauri-2.12.0')") ||
+    !tauriSettings.includes("crateDir('tauri-plugin-opener-2.6.0')") ||
+    /[A-Za-z]:\\\\Users\\/.test(tauriSettings) ||
     !tauriBuild.includes('tauri_build::is_dev()')) {
   console.error("Android release libraries must use custom-protocol and embed frontend assets");
   process.exit(1);
