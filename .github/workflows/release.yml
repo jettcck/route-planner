@@ -165,10 +165,11 @@ jobs:
           if (-not $bundle) { throw 'NSIS installer not found' }
           $signature = (Get-Content "$($bundle.FullName).sig" -Raw).Trim()
           if (-not $signature) { throw 'Updater signature not found' }
-          # Tauri derives the installer name from productName. Keep the
-          # manifest aligned with the actual uploaded asset (which currently
-          # includes the Chinese product name) instead of guessing a filename.
-          $assetName = $bundle.Name
+          # tauri-action normalizes the uploaded Release asset name to an
+          # ASCII-safe Windows installer name even though the local bundle
+          # path keeps the Chinese product name. The updater URL must use the
+          # actual Release asset name, not the local filename.
+          $assetName = "Route_${version}_x64-setup.exe"
           $assetPath = [Uri]::EscapeDataString($assetName).Replace('%2F', '/')
           $manifest = @{
             version = $version
