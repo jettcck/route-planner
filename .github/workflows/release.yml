@@ -29,8 +29,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Install Tauri Linux build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          # GitHub-hosted Ubuntu images normally include these packages. Keep
+          # the install best-effort with a timeout so a transient apt mirror
+          # outage cannot hold the entire release queue forever.
+          timeout 180s sudo apt-get update || echo "apt update timed out; using runner packages"
+          timeout 180s sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev \
             build-essential \
             curl \
@@ -39,7 +42,7 @@ jobs:
             libxdo-dev \
             libssl-dev \
             libayatana-appindicator3-dev \
-            librsvg2-dev
+            librsvg2-dev || echo "apt install timed out; using runner packages"
       - run: npm ci
       - name: Check production release configuration before builds
         env:
