@@ -107,6 +107,20 @@ import "./redesign.css";
 
 type ViewId = "trip" | "packing" | "ledger" | "checkin" | "prep" | "account";
 
+type SelfCheckStatus = "ok" | "warn" | "error";
+type SelfCheckItem = {
+  label: string;
+  status: SelfCheckStatus;
+  detail: string;
+};
+
+type UpdateCheckResult = {
+  supported: boolean;
+  update: Update | null;
+  androidUpdate: AndroidUpdate | null;
+  error?: string;
+};
+
 /** 构建期注入的应用版本（见 vite.config.ts）。 */
 const APP_VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "0.0.0";
 
@@ -762,6 +776,10 @@ function PlannerApp() {
   const [androidUpdate, setAndroidUpdate] = useState<AndroidUpdate | null>(null);
   const [updateBusy, setUpdateBusy] = useState(false);
   const [updateError, setUpdateError] = useState("");
+  const [selfCheckBusy, setSelfCheckBusy] = useState(false);
+  const [selfCheckItems, setSelfCheckItems] = useState<SelfCheckItem[]>([]);
+  const [selfCheckAt, setSelfCheckAt] = useState("");
+  const selfCheckOperationLock = useRef(false);
   const updateCheckVersion = useRef(0);
   const updateOperationLock = useRef(false);
   const [installedMapApps, setInstalledMapApps] = useState<string[] | null>(null);
@@ -1482,8 +1500,10 @@ function PlannerApp() {
       endUpdateOperation();
     }
   }
-  async function checkForUpdates() {
-    if (!beginUpdateOperation()) return;
+  async function runUpdateCheck(options: { quiet?: boolean } = {}): Promise<UpdateCheckResult> {
+    if (!beginUpdateOperation()) {
+      return { supported: isTauri(), update: null, androidUpdate: null, error: "更新检查已在进行中" };
+    }
     const version = ++updateCheckVersion.current;
     setUpdateError("");
     // A failed refresh must not leave an old release installable. Close the
@@ -1494,27 +1514,111 @@ function PlannerApp() {
     setAndroidUpdate(null);
     try {
       if (!isTauri()) {
-        setError("当前运行环境不支持应用更新检查");
-        return;
+        const message = "当前运行环境不支持应用更新检查";
+        if (!options.quiet) setError(message);
+        return { supported: false, update: null, androidUpdate: null, error: message };
       }
       if (/Android/i.test(navigator.userAgent)) {
         const update = await invoke<AndroidUpdate | null>("plugin:android-updater|check");
         setAndroidUpdate(update);
-        setError(update ? `发现新版本 v${update.version}，请在页面顶部下载安装` : "当前已是最新版本");
+        if (!options.quiet) setError(update ? `发现新版本 v${update.version}，请在页面顶部下载安装` : "当前已是最新版本");
+        return { supported: true, update: null, androidUpdate: update };
       } else {
         const update = await check();
         setAvailableUpdate(update);
-        setError(update ? `发现新版本 v${update.version}，请在页面顶部下载安装` : "当前已是最新版本");
+        if (!options.quiet) setError(update ? `发现新版本 v${update.version}，请在页面顶部下载安装` : "当前已是最新版本");
         if (!update) setUpdateError("");
+        return { supported: true, update, androidUpdate: null };
       }
     } catch (reason) {
-      setError(`检查更新失败：${reason instanceof Error ? reason.message : String(reason)}`);
+      const message = `检查更新失败：${reason instanceof Error ? reason.message : String(reason)}`;
+      if (!options.quiet) setError(message);
+      return { supported: isTauri(), update: null, androidUpdate: null, error: message };
     } finally {
       // A newer operation owns the lock now. Stale checks must only discard
       // their result; clearing the shared lock here would allow a second
       // download/install to overlap the active operation.
       if (version === updateCheckVersion.current) endUpdateOperation();
     }
+  }
+  async function checkForUpdates() {
+    await runUpdateCheck();
+  }
+  async function runSelfCheck() {
+    if (selfCheckOperationLock.current) return;
+    selfCheckOperationLock.current = true;
+    setSelfCheckBusy(true);
+    setSelfCheckItems([]);
+    const items: SelfCheckItem[] = [];
+    const checkedTrip = tripSchema.safeParse(trip);
+    items.push(checkedTrip.success
+      ? { label: "行程数据", status: "ok", detail: `${trip.days.length} 天、${trip.days.reduce((sum, day) => sum + day.activities.length, 0)} 个安排，结构校验通过` }
+      : { label: "行程数据", status: "error", detail: checkedTrip.error.issues[0]?.message ?? "行程数据格式异常" });
+    const checkedInput = plannerInputSchema.safeParse(input);
+    items.push(checkedInput.success
+      ? { label: "规划条件", status: "ok", detail: `${input.destination} · ${input.days} 天 · ${input.travelers} 人` }
+      : { label: "规划条件", status: "error", detail: checkedInput.error.issues[0]?.message ?? "规划条件格式异常" });
+    items.push({
+      label: "应用版本",
+      status: APP_VERSION === "0.0.0" ? "warn" : "ok",
+      detail: APP_VERSION === "0.0.0" ? "未读取到构建版本" : `当前版本 v${APP_VERSION}`,
+    });
+    try {
+      const key = `route-self-check:${Date.now()}`;
+      const marker = JSON.stringify({ ok: true, at: Date.now() });
+      localStorage.setItem(key, marker);
+      const storedMarker = localStorage.getItem(key);
+      localStorage.removeItem(key);
+      items.push(storedMarker === marker
+        ? { label: "本机存储", status: "ok", detail: "读写测试通过，未修改行程数据" }
+        : { label: "本机存储", status: "error", detail: "读回内容与写入内容不一致" });
+    } catch {
+      items.push({ label: "本机存储", status: "error", detail: "读写测试失败，请检查设备存储空间" });
+    }
+    if (nativeAiSettings && isAndroidSecureStore()) {
+      if (!aiKeysReady) {
+        items.push({ label: "Android 安全存储", status: "warn", detail: "安全存储仍在恢复，请稍后再次自检" });
+      } else {
+        const secure = await readSecureEntry<Partial<Record<ProviderId, string>>>("route-ai-keys");
+        if (!secure.ok) {
+          items.push({ label: "Android 安全存储", status: "error", detail: "无法读取 Keystore，请检查设备锁屏状态和存储空间" });
+        } else {
+          items.push({
+            label: "Android 安全存储",
+            status: "ok",
+            detail: secure.found ? "Keystore 可读，AI Key 不会写入明文存储" : "Keystore 可用，当前尚未保存 AI Key",
+          });
+        }
+      }
+    } else if (nativeAiSettings) {
+      items.push({
+        label: "AI Key",
+        status: "warn",
+        detail: apiKey.trim() ? "已填写，仅保存在本次桌面运行内存中" : "尚未填写，生成攻略前需要配置",
+      });
+    } else {
+      items.push({ label: "AI 服务", status: "warn", detail: "网页端由账号服务代理，请在账号页检查服务状态" });
+    }
+    items.push({
+      label: "网络连接",
+      status: online ? "ok" : "warn",
+      detail: online ? "当前在线，可检查更新和刷新天气" : "当前离线，本机行程功能仍可使用",
+    });
+    const updateResult = await runUpdateCheck({ quiet: true });
+    if (!updateResult.supported) {
+      items.push({ label: "应用更新", status: "warn", detail: updateResult.error ?? "当前环境不支持更新检查" });
+    } else if (updateResult.error) {
+      items.push({ label: "应用更新", status: "warn", detail: updateResult.error });
+    } else if (updateResult.update || updateResult.androidUpdate) {
+      const version = updateResult.update?.version ?? updateResult.androidUpdate?.version ?? "新版本";
+      items.push({ label: "应用更新", status: "warn", detail: `发现 v${version}，可在本页或顶部更新` });
+    } else {
+      items.push({ label: "应用更新", status: "ok", detail: "当前已是最新版本" });
+    }
+    setSelfCheckItems(items);
+    setSelfCheckAt(new Date().toLocaleString("zh-CN", { hour12: false }));
+    selfCheckOperationLock.current = false;
+    setSelfCheckBusy(false);
   }
   async function installAndroidUpdate() {
     if (!androidUpdate) return;
@@ -3087,6 +3191,53 @@ function PlannerApp() {
                   : "使用兼容 Chat Completions 的服务生成行程和 AI 管家分析。桌面版只在本次运行期间保留 Key，关闭应用后需要重新输入。"
                 : "网页端 AI 由账号服务代理，浏览器不会保存或接触 API Key。请在账号页查看服务状态；管理员配置 AI 后即可使用。"}
             </p>
+            <section className="self-check" aria-label="应用自检与更新">
+              <div className="self-check__head">
+                <div>
+                  <strong>应用自检与更新</strong>
+                  <small>检查行程数据、本机存储、安全存储、网络和新版本</small>
+                </div>
+                <button
+                  className="self-check__run"
+                  type="button"
+                  onClick={() => void runSelfCheck()}
+                  disabled={selfCheckBusy}
+                >
+                  <RefreshCw size={14} className={selfCheckBusy ? "spin" : ""} />
+                  {selfCheckBusy ? "自检中" : "立即自检"}
+                </button>
+              </div>
+              {selfCheckItems.length ? (
+                <div className="self-check__items">
+                  {selfCheckItems.map((item) => (
+                    <div className="self-check__item" key={item.label}>
+                      <span className={`self-check__status ${item.status}`}>
+                        {item.status === "ok" ? "正常" : item.status === "warn" ? "提示" : "异常"}
+                      </span>
+                      <div>
+                        <strong>{item.label}</strong>
+                        <small>{item.detail}</small>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="self-check__empty">还没有运行自检。建议出发前检查一次，结果只读，不会修改行程。</p>
+              )}
+              {selfCheckAt ? <small className="self-check__time">上次检查：{selfCheckAt}</small> : null}
+              {(availableUpdate || androidUpdate) ? (
+                <div className="self-check__update">
+                  <span>已发现 v{availableUpdate?.version ?? androidUpdate?.version}，现在可以完成更新。</span>
+                  <button
+                    type="button"
+                    onClick={() => void (androidUpdate ? installAndroidUpdate() : installUpdate())}
+                    disabled={updateBusy}
+                  >
+                    {updateBusy ? "处理中..." : androidUpdate ? "下载并安装" : "立即更新"}
+                  </button>
+                </div>
+              ) : null}
+            </section>
             <section className="ui-preferences" aria-label="交互反馈设置">
               <div className="ui-preferences__head">
                 <div>

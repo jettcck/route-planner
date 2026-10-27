@@ -47,6 +47,8 @@ Android 正式包默认**不搭载任何账号服务**。单个或少数几台�
 
 Android 自更新会检查构建时注入的 GitHub 仓库。GitHub Actions 自动使用当前仓库；本地构建其他 fork 时设置 `ROUTE_ANDROID_UPDATE_REPOSITORY=owner/repository`，避免更新器误查原项目 Release。Windows 发布 job 也会在构建前把桌面更新端点切换到当前仓库。
 
+设置页里的 **应用自检与更新** 可在出发前手动运行一次：它只读校验当前行程和规划条件，测试本机存储、Android Keystore、网络状态，并复用正式更新检查。自检不会改写或删除行程数据；发现新版本时可直接从该面板安装。
+
 在应用右上角打开 **AI 设置**，可选择 OpenAI、DeepSeek、智谱 AI、通义千问、Moonshot/Kimi、SiliconFlow 或自定义兼容服务。选择预置服务商后，接口地址和常用模型会自动填写；自定义服务需要填写兼容 Chat Completions 的 HTTPS 接口地址。Android 端的密钥会使用 Android Keystore 加密保存，桌面端和网页端只在当前窗口内存中使用，不写入本地存储或行程文件。行程与规划条件保存在当前设备的 WebView 本地存储中。
 
 AI 生成的营业时间、费用、预约和交通细节可能不准确。天气预报来自 Open-Meteo，通常只能查询未来 16 天。出行前应核对场所官方渠道。活动费用汇总不包括未列出的住宿与大交通。

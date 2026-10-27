@@ -242,6 +242,23 @@ if (!appSource.includes('const localFeaturesReady = auth.ready && (!requiresAcco
   console.error("Single-user Android builds must keep local reminders, weather, and winter-break planning available without an account");
   process.exit(1);
 }
+if (!appSource.includes('type SelfCheckStatus = "ok" | "warn" | "error"') ||
+    !appSource.includes('async function runSelfCheck()') ||
+    !appSource.includes('tripSchema.safeParse(trip)') ||
+    !appSource.includes('plannerInputSchema.safeParse(input)') ||
+    !appSource.includes('localStorage.setItem(key, marker)') ||
+    !appSource.includes('readSecureEntry<Partial<Record<ProviderId, string>>>("route-ai-keys")') ||
+    !appSource.includes('runUpdateCheck({ quiet: true })') ||
+    !appSource.includes('应用自检与更新') ||
+    !appSource.includes('不会修改行程')) {
+  console.error("The app must expose a read-only self-check panel that also checks updates");
+  process.exit(1);
+}
+if (appSource.includes('runSelfCheck()') &&
+    !appSource.includes('plugin:android-updater|check')) {
+  console.error("Self-check must retain the Android updater check command");
+  process.exit(1);
+}
 if (!shareBridge.includes('plugin:file-share|share_text", { filename, text, fileType: type }') ||
     !androidTestPage.includes('plugin:file-share|share_text", { filename: "途迹安卓测试.txt"') ||
     !androidTestPage.includes('fileType: "text/plain"')) {
