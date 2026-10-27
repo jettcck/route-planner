@@ -103,6 +103,7 @@ const AndroidPreviewPage = ANDROID_PREVIEW_ENABLED
   ? lazy(() => import("./android-preview"))
   : null;
 import "./App.css";
+import "./redesign.css";
 
 type ViewId = "trip" | "packing" | "ledger" | "checkin" | "prep" | "account";
 
