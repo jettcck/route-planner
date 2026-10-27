@@ -434,7 +434,7 @@ const requiredWorkflowMarkers = [
   "contents: write",
   "timeout-minutes:",
   "Configure updater repository",
-  "assetName = $bundle.Name",
+  'assetName = "Route_${version}_x64-setup.exe"',
   "EscapeDataString($assetName)",
   "Verify Android APK before publishing",
   "apksigner\" verify --verbose",
