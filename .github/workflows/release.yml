@@ -231,6 +231,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+      - name: Fetch Rust sources for Android Gradle plugins
+        run: cargo fetch --manifest-path src-tauri/Cargo.toml --locked
       - run: npm ci
       - name: Run Android compile validation
         env:
