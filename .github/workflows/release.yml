@@ -189,11 +189,13 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const { data: release } = await github.rest.repos.getReleaseByTag({
+            const releases = await github.paginate(github.rest.repos.listReleases, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag: process.env.RELEASE_TAG
+              per_page: 100
             });
+            const release = releases.find((item) => item.tag_name === process.env.RELEASE_TAG);
+            if (!release) throw new Error(`Draft release ${process.env.RELEASE_TAG} was not found`);
             await github.rest.repos.uploadReleaseAsset({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -323,11 +325,13 @@ jobs:
           script: |
             const fs = require('fs');
             const path = require('path');
-            const { data: release } = await github.rest.repos.getReleaseByTag({
+            const releases = await github.paginate(github.rest.repos.listReleases, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag: process.env.RELEASE_TAG
+              per_page: 100
             });
+            const release = releases.find((item) => item.tag_name === process.env.RELEASE_TAG);
+            if (!release) throw new Error(`Draft release ${process.env.RELEASE_TAG} was not found`);
             const assetName = path.basename(process.env.ASSET_PATH);
             const oldAssets = release.assets.filter(asset => asset.name === assetName || asset.name === `${assetName}.sha256`);
             for (const oldAsset of oldAssets) {
@@ -371,11 +375,13 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const { data: release } = await github.rest.repos.getReleaseByTag({
+            const releases = await github.paginate(github.rest.repos.listReleases, {
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag: process.env.RELEASE_TAG
+              per_page: 100
             });
+            const release = releases.find((item) => item.tag_name === process.env.RELEASE_TAG);
+            if (!release) throw new Error(`Draft release ${process.env.RELEASE_TAG} was not found`);
             const manifestAsset = release.assets.find((asset) => asset.name === 'latest.json');
             if (!manifestAsset) throw new Error('latest.json was not uploaded');
             const response = await github.request(manifestAsset.url, {
