@@ -7,6 +7,42 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 const module = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
 
+// 生产环境里"是否已自动请求过通知权限"存在 localStorage；Node 没有这个全局，
+// 不 mock 的话该分支会退化成"每次都问"，本文件就测不到真机行为。
+const storage = new Map();
+globalThis.localStorage = {
+  getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+  setItem: (key, value) => { storage.set(key, String(value)); },
+  removeItem: (key) => { storage.delete(key); },
+};
+
+// --- 启动只自动请求一次通知权限 ---
+// Android 第二次 requestPermissions 不弹框，而是直接 startActivity 跳到
+// 「通知渠道设置」。若每次启动都无条件注册天气监控，用户每次打开应用都会被
+// 甩进系统设置，观感等同"应用打不开"。
+{
+  storage.clear();
+  const bootCalls = [];
+  const boot = module.createWeatherRegistration({
+    readStatus: async () => ({ notificationsEnabled: false }),
+    isActive: () => true,
+    now: () => 1_000,
+    schedule: async (immediate) => {
+      bootCalls.push(immediate);
+      throw new Error("notification permission disabled");
+    },
+  });
+  await boot(true).catch(() => {});
+  if (bootCalls.length !== 1) throw new Error("首次启动应发起一次权限请求");
+  // 第二次、第三次冷启动：已经问过，不得再触发（否则真机会跳系统设置页）
+  await boot(true).catch(() => {});
+  await boot(true).catch(() => {});
+  if (bootCalls.length !== 1) {
+    throw new Error(`已请求过通知权限后不得重复触发，实际调用 ${bootCalls.length} 次`);
+  }
+  storage.clear();
+}
+
 const calls = [];
 let enabled = false;
 let now = 1_000_000;

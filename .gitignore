@@ -42,6 +42,8 @@ deploy/data/
 /android-*.png
 /android-*.jpg
 /android-*.mp4
+/途迹-*.png
+/途迹-*.jpg
 # 临时调试目录
 .claude/
 
